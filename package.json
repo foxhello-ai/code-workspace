@@ -9,6 +9,10 @@
     "dev:web": "vite",
     "build": "tsc -p tsconfig.server.json && vite build",
     "start": "node dist/server/server/index.js",
+    "pm2:start": "pm2 start ecosystem.config.cjs --update-env",
+    "pm2:restart": "pm2 restart code-workspace --update-env",
+    "pm2:stop": "pm2 stop code-workspace",
+    "pm2:logs": "pm2 logs code-workspace",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -23,6 +27,7 @@
     "fastify": "^5.4.0",
     "lucide-react": "^0.525.0",
     "monaco-editor": "^0.52.2",
+    "pm2": "^7.0.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "zustand": "^5.0.6"
