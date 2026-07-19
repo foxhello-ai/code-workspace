@@ -102,4 +102,34 @@ describe("workspace API", () => {
     expect(diff.statusCode).toBe(200);
     expect(diff.json().data.files[0].newText).toBe("one\n");
   });
+
+  it("lists branches, protects dirty worktrees and switches local branches", async () => {
+    execFileSync("git", ["branch", "feature/test"], { cwd: root });
+    const branches = await app.inject({ method: "GET", url: "/api/git/branches" });
+    expect(branches.json().data.some((branch: { name: string }) => branch.name === "feature/test")).toBe(true);
+    await writeFile(path.join(root, "hello.txt"), "dirty\n");
+    const blocked = await app.inject({ method: "POST", url: "/api/git/switch", payload: { name: "feature/test", kind: "local" } });
+    expect(blocked.statusCode).toBe(409);
+    execFileSync("git", ["restore", "hello.txt"], { cwd: root });
+    const switched = await app.inject({ method: "POST", url: "/api/git/switch", payload: { name: "feature/test", kind: "local" } });
+    expect(switched.statusCode).toBe(200);
+    expect(switched.json().data.workspace.git.branch).toBe("feature/test");
+  });
+
+  it("returns topological graph data with merge parents and decorations", async () => {
+    const baseBranch = execFileSync("git", ["branch", "--show-current"], { cwd: root, encoding: "utf8" }).trim();
+    execFileSync("git", ["switch", "-qc", "feature/graph"], { cwd: root });
+    await writeFile(path.join(root, "feature.txt"), "feature\n");
+    execFileSync("git", ["add", "feature.txt"], { cwd: root });
+    execFileSync("git", ["commit", "-qm", "feature commit"], { cwd: root });
+    execFileSync("git", ["switch", "-q", baseBranch], { cwd: root });
+    await writeFile(path.join(root, "main.txt"), "main\n");
+    execFileSync("git", ["add", "main.txt"], { cwd: root });
+    execFileSync("git", ["commit", "-qm", "main commit"], { cwd: root });
+    execFileSync("git", ["merge", "--no-ff", "-qm", "merge graph", "feature/graph"], { cwd: root });
+    const graph = await app.inject({ method: "GET", url: "/api/git/graph?limit=100" });
+    expect(graph.statusCode).toBe(200);
+    expect(graph.json().data.items.some((commit: { parents: string[] }) => commit.parents.length === 2)).toBe(true);
+    expect(graph.json().data.items.some((commit: { decorations: unknown[] }) => commit.decorations.length > 0)).toBe(true);
+  });
 });

@@ -39,7 +39,7 @@
 - Codex 会话、聊天、任务、运行日志或终端。
 - xterm.js、PTY 服务或任意命令执行入口。
 - AI Commit、AI Diff 或 AI 审查。
-- Git Commit、Stage、Unstage、Discard、Push、Pull 等写操作。
+- Git Commit、Stage、Unstage、Discard、Push、Pull 等写操作；分支切换作为唯一纳入范围的受控 Git 写操作。
 - 调试器、插件系统、完整语言服务器、多用户协作。
 - 多工作区同时打开。
 
@@ -1061,3 +1061,51 @@ MVP 建议：
 - Linux/macOS 之外是否要求首发支持 Windows。
 - dirty 缓冲区是否需要浏览器崩溃恢复；当前建议使用 `sessionStorage`。
 - 单目录分页阈值、大文件阈值和 Git 最大输出值。
+
+## 20. V1.1 需求变更：分支切换与 Commit Graph
+
+### 20.1 分支切换
+
+新增本地、远程分支列表和分支切换能力：
+
+- 顶部栏显示当前分支并提供分支选择器。
+- 支持搜索本地与远程分支。
+- 本地分支使用 `git switch <branch>`。
+- 远程分支在不存在对应本地分支时使用 `git switch --track <remote>/<branch>`。
+- Monaco 存在未保存内容时必须由用户确认，不能静默切换。
+- Git 工作区存在未提交内容时，后端默认返回 `409 GIT_WORKTREE_DIRTY`；用户再次确认后可尝试保留修改切换。
+- Git 自身判断修改会被覆盖时，切换失败并原样保留当前分支和工作区。
+- 成功后刷新分支、HEAD、文件树、Git 状态、历史、提交图和已打开 Diff。
+- 已打开文件继续使用外部文件变化机制校验新磁盘版本。
+
+接口：
+
+```text
+GET  /api/git/branches
+POST /api/git/switch
+```
+
+### 20.2 Commit Graph
+
+新增全分支拓扑提交图：
+
+- 使用 `git log --all --topo-order --date-order --parents --decorate=full` 获取数据。
+- 展示提交节点、父子连线、分叉、合并和多条彩色轨道。
+- 展示 HEAD、本地分支、远程分支和 Tag 装饰。
+- 支持分页加载，默认每页 100 条。
+- 点击节点复用提交详情和 Commit Diff。
+- 历史页允许在线性历史与提交图之间切换。
+- HEAD 或 refs 变化时提交图失效并提示刷新。
+
+接口：
+
+```text
+GET /api/git/graph?cursor=&limit=100
+```
+
+### 20.3 安全约束
+
+- 分支名必须来自后端实时分支列表，禁止将任意用户字符串直接作为 Git revision 执行。
+- 分支切换命令禁用 shell，并仅在该写操作中允许 Git 获取索引锁。
+- 不提供强制切换、自动丢弃修改或自动 stash。
+- Commit Graph 和分支列表仍为只读查询。
