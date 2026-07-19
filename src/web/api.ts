@@ -5,7 +5,9 @@ export class ApiClientError extends Error {
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, { ...init, headers: { "content-type": "application/json", ...init?.headers } });
+  const headers = new Headers(init?.headers);
+  if (init?.body && !headers.has("content-type")) headers.set("content-type", "application/json");
+  const response = await fetch(url, { ...init, headers });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     const error = body as ApiErrorBody | null;

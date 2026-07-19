@@ -1,14 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, ChevronsRight, File, Folder, FolderOpen, GitBranch, History, RefreshCw, Save, X, Files, GitCompare, Layers2, Plus, Trash2, XCircle } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronRight, ChevronsRight, Clock3, File, Folder, FolderOpen, GitBranch, History, RefreshCw, Save, X, Files, GitCompare, Layers2, Plus, Trash2, XCircle } from "lucide-react";
 import type { DiffDocument, FileTreeEntry, GitChangedFile, GitCommitDetail, GitCommitSummary } from "../shared/contracts";
 import { api, ApiClientError } from "./api";
 import { type TextTab, useAppStore } from "./store";
 
 type View = "files" | "changes" | "history";
+const RECENT_WORKSPACES_KEY = "code-workspace.recent-workspaces";
 
 function message(error: unknown) { return error instanceof Error ? error.message : "操作失败"; }
+function loadRecentWorkspaces() {
+  try {
+    const value = JSON.parse(localStorage.getItem(RECENT_WORKSPACES_KEY) ?? "[]");
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").slice(0, 10) : [];
+  } catch { return []; }
+}
 
 export function App() {
   const store = useAppStore();
@@ -16,9 +23,11 @@ export function App() {
   const [view, setView] = useState<View>("files");
   const [workspacePath, setWorkspacePath] = useState("");
   const [notice, setNotice] = useState("");
+  const [recentWorkspaces, setRecentWorkspaces] = useState<string[]>(loadRecentWorkspaces);
+  const [switchingWorkspace, setSwitchingWorkspace] = useState(false);
   const active = store.tabs.find((tab) => tab.id === store.activeId) ?? null;
 
-  useEffect(() => { api.workspace().then(store.setWorkspace).catch(() => undefined); }, []);
+  useEffect(() => { api.workspace().then((workspace) => { store.setWorkspace(workspace); rememberWorkspace(workspace.rootPath); }).catch(() => undefined); }, []);
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => { if (store.tabs.some((t) => t.type === "text" && t.dirty)) event.preventDefault(); };
     window.addEventListener("beforeunload", beforeUnload); return () => window.removeEventListener("beforeunload", beforeUnload);
@@ -66,9 +75,40 @@ export function App() {
     return () => window.removeEventListener("keydown", handleKeydown);
   }, []);
 
-  async function openWorkspace() {
-    try { const ws = await api.openWorkspace(workspacePath.trim()); store.clear(); store.setWorkspace(ws); queryClient.clear(); setNotice(""); }
+  function rememberWorkspace(path: string) {
+    setRecentWorkspaces((current) => {
+      const next = [path, ...current.filter((item) => item !== path)].slice(0, 10);
+      localStorage.setItem(RECENT_WORKSPACES_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
+  function removeRecentWorkspace(path: string) {
+    setRecentWorkspaces((current) => {
+      const next = current.filter((item) => item !== path);
+      localStorage.setItem(RECENT_WORKSPACES_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
+  async function openWorkspace(pathOverride?: string) {
+    const target = (pathOverride ?? workspacePath).trim();
+    if (!target) return setNotice("请输入工作区路径");
+    setSwitchingWorkspace(true);
+    try { const ws = await api.openWorkspace(target); store.clear(); store.setWorkspace(ws); queryClient.clear(); setWorkspacePath(ws.rootPath); rememberWorkspace(ws.rootPath); setNotice(""); setView("files"); }
     catch (error) { setNotice(message(error)); }
+    finally { setSwitchingWorkspace(false); }
+  }
+  async function switchWorkspace() {
+    if (store.tabs.some((tab) => tab.type === "text" && tab.dirty) && !confirm("存在未保存文件，确定切换工作区吗？")) return;
+    setSwitchingWorkspace(true);
+    setNotice("正在关闭当前工作区…");
+    try {
+      await api.closeWorkspace();
+      store.clear();
+      queryClient.clear();
+      setWorkspacePath("");
+      setNotice("");
+    } catch (error) { setNotice(`关闭工作区失败：${message(error)}`); }
+    finally { setSwitchingWorkspace(false); }
   }
   async function save(tab: TextTab, version = tab.diskVersion) {
     try { const file = await api.save(tab.path, tab.bufferText, version); store.saved(tab.id, file); setNotice("已保存"); }
@@ -79,13 +119,13 @@ export function App() {
     }
   }
 
-  if (!store.workspace) return <OpenWorkspace path={workspacePath} setPath={setWorkspacePath} open={openWorkspace} error={notice} />;
+  if (!store.workspace) return <OpenWorkspace path={workspacePath} setPath={setWorkspacePath} open={openWorkspace} error={notice} recent={recentWorkspaces} removeRecent={removeRecentWorkspace} busy={switchingWorkspace} />;
   return <div className="app-shell">
     <header className="topbar">
       <div className="brand">Code Workspace</div><div className="workspace-name">{store.workspace.name}</div>
       {store.workspace.git && <div className="branch"><GitBranch size={14}/>{store.workspace.git.branch ?? "detached"}</div>}
       <button className="icon-button" title="刷新" onClick={() => queryClient.invalidateQueries()}><RefreshCw size={16}/></button>
-      <button className="close-workspace" onClick={async () => { if (store.tabs.some((t) => t.type === "text" && t.dirty) && !confirm("存在未保存文件，确定关闭工作区吗？")) return; await api.closeWorkspace(); store.clear(); queryClient.clear(); }}>关闭工作区</button>
+      <button className="close-workspace" disabled={switchingWorkspace} onClick={switchWorkspace}>{switchingWorkspace ? "正在切换…" : "切换工作区"}</button>
     </header>
     <aside className="activitybar">
       <NavButton active={view === "files"} title="文件" onClick={() => setView("files")}><Files/></NavButton>
@@ -146,8 +186,8 @@ export function App() {
   }
 }
 
-function OpenWorkspace({ path, setPath, open, error }: { path: string; setPath(v: string): void; open(): void; error: string }) {
-  return <div className="open-page"><div className="open-card"><div className="logo"><Files/></div><h1>Code Workspace</h1><p>打开一个本地目录，浏览、编辑并检查 Git 修改。</p><label>工作区绝对路径</label><input autoFocus value={path} onChange={(e) => setPath(e.target.value)} onKeyDown={(e) => e.key === "Enter" && open()} placeholder="/home/user/project"/><button className="primary" onClick={open}>打开工作区</button>{error && <div className="error">{error}</div>}<small>服务默认仅监听本机地址。不会启动终端或管理任何外部工具会话。</small></div></div>;
+function OpenWorkspace({ path, setPath, open, error, recent, removeRecent, busy }: { path: string; setPath(v: string): void; open(path?: string): void; error: string; recent: string[]; removeRecent(path: string): void; busy: boolean }) {
+  return <div className="open-page"><div className="open-card"><div className="logo"><Files/></div><h1>Code Workspace</h1><p>打开一个本地目录，浏览、编辑并检查 Git 修改。</p><label>工作区绝对路径</label><div className="open-input-row"><input autoFocus value={path} disabled={busy} onChange={(e) => setPath(e.target.value)} onKeyDown={(e) => e.key === "Enter" && open()} placeholder="/home/user/project"/><button className="primary" disabled={busy} onClick={() => open()}>{busy ? "正在打开…" : "打开工作区"}</button></div>{error && <div className="error">{error}</div>}{recent.length > 0 && <section className="recent-workspaces"><h2><Clock3/>最近打开</h2>{recent.map((item) => <div className="recent-workspace" key={item}><button className="recent-open" disabled={busy} onClick={() => open(item)}><FolderOpen/><span><strong>{item.split("/").filter(Boolean).at(-1) ?? item}</strong><small>{item}</small></span><ArrowRight/></button><button className="recent-remove" title="从最近列表移除" onClick={() => removeRecent(item)}><X/></button></div>)}</section>}<small>最近路径只保存在当前浏览器。服务不会启动终端或管理任何外部工具会话。</small></div></div>;
 }
 
 function NavButton({ active, title, onClick, children }: { active: boolean; title: string; onClick(): void; children: React.ReactNode }) { return <button className={active ? "active" : ""} title={title} onClick={onClick}>{children}</button>; }

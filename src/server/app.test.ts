@@ -23,6 +23,13 @@ beforeEach(async () => {
 afterEach(async () => { await app.close(); await rm(root, { recursive: true, force: true }); });
 
 describe("workspace API", () => {
+  it("closes the current workspace without requiring a JSON body", async () => {
+    const closed = await app.inject({ method: "POST", url: "/api/workspace/close" });
+    expect(closed.statusCode).toBe(200);
+    const current = await app.inject({ method: "GET", url: "/api/workspace" });
+    expect(current.statusCode).toBe(404);
+  });
+
   it("reads and safely saves a file", async () => {
     const read = await app.inject({ method: "GET", url: "/api/files/content?path=hello.txt" });
     expect(read.statusCode).toBe(200);
