@@ -41,6 +41,15 @@ describe("workspace API", () => {
     expect(saved.json().error.code).toBe("FILE_VERSION_CONFLICT");
   });
 
+  it("accepts UTF-8 when a multibyte character crosses the former sample boundary", async () => {
+    const content = `${"a".repeat(8191)}中\n`;
+    await writeFile(path.join(root, "boundary.md"), content);
+    const response = await app.inject({ method: "GET", url: "/api/files/content?path=boundary.md" });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.encoding).toBe("utf-8");
+    expect(response.json().data.content).toBe(content);
+  });
+
   it("reports unstaged, staged and untracked changes and diff content", async () => {
     await writeFile(path.join(root, "hello.txt"), "changed\n");
     await writeFile(path.join(root, "new.txt"), "new\n");

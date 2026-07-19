@@ -38,7 +38,7 @@ export class FileService {
     const binary = sample.includes(0);
     if (binary) return { binary: true, encoding: "unknown" as const };
     const decoded = new TextDecoder("utf-8", { fatal: true });
-    try { decoded.decode(sample); return { binary: false, encoding: "utf-8" as const }; }
+    try { decoded.decode(buffer); return { binary: false, encoding: "utf-8" as const }; }
     catch { return { binary: false, encoding: "unknown" as const }; }
   }
 
