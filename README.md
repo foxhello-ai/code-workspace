@@ -14,6 +14,8 @@
 - 外部新增、修改、删除和目录变化实时同步
 - 编辑器缓冲区与磁盘内容冲突 Diff
 - Git staged、unstaged、untracked、conflict 分类
+- 本地及远程分支查看与受保护切换
+- 全分支 Commit Graph、分叉、合并、Tag 与 refs 展示
 - HEAD、暂存区和工作区 Diff
 - Git 历史分页、提交详情和提交文件 Diff
 - UTF-8、二进制、大文件和路径安全保护

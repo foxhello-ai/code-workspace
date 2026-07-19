@@ -1,4 +1,4 @@
-import type { ApiErrorBody, DiffDocument, FileContent, FileTreeEntry, GitCommitDetail, GitCommitSummary, GitStatusSnapshot, WorkspaceInfo } from "../shared/contracts";
+import type { ApiErrorBody, DiffDocument, FileContent, FileTreeEntry, GitBranchInfo, GitCommitDetail, GitCommitSummary, GitGraphCommit, GitStatusSnapshot, WorkspaceInfo } from "../shared/contracts";
 
 export class ApiClientError extends Error {
   constructor(public status: number, public code: string, message: string, public details?: unknown) { super(message); }
@@ -33,7 +33,10 @@ export const api = {
   rename: (from: string, to: string) => request<null>("/api/files/rename", { method: "PATCH", body: JSON.stringify({ from, to }) }),
   remove: (path: string, recursive = false) => request<null>(`/api/files?path=${encodeURIComponent(path)}&recursive=${recursive}&confirmed=true`, { method: "DELETE" }),
   gitStatus: () => request<GitStatusSnapshot>("/api/git/status"),
+  branches: () => request<GitBranchInfo[]>("/api/git/branches"),
+  switchBranch: (name: string, kind: "local" | "remote", allowDirty = false) => request<{ workspace: WorkspaceInfo; status: GitStatusSnapshot }>("/api/git/switch", { method: "POST", body: JSON.stringify({ name, kind, allowDirty }) }),
   history: (cursor?: string) => request<{ items: GitCommitSummary[]; nextCursor: string | null; head: string | null }>(`/api/git/history?limit=50${cursor ? `&cursor=${cursor}` : ""}`),
+  graph: (cursor = 0) => request<{ items: GitGraphCommit[]; nextCursor: number | null; head: string | null }>(`/api/git/graph?limit=100&cursor=${cursor}`),
   commit: (hash: string) => request<GitCommitDetail>(`/api/git/commits/${hash}`),
   diff: (scope: "working" | "staged" | "all", path?: string) => request<DiffDocument>(`/api/git/diff?scope=${scope}${path ? `&path=${encodeURIComponent(path)}` : ""}`),
   commitDiff: (hash: string, path?: string) => request<DiffDocument>(`/api/git/diff/commits/${hash}${path ? `?path=${encodeURIComponent(path)}` : ""}`)

@@ -41,4 +41,13 @@ export class WorkspaceService {
   }
 
   async close() { this.current = null; await this.onChange?.(null); }
+
+  async refreshGitInfo() {
+    const context = this.get();
+    if (!context.gitRunner || !context.info.git) return context.info;
+    const branch = (await context.gitRunner.text(["symbolic-ref", "--short", "-q", "HEAD"], { allowFailure: true })).trim() || null;
+    const head = (await context.gitRunner.text(["rev-parse", "--verify", "HEAD"], { allowFailure: true })).trim() || null;
+    context.info = { ...context.info, git: { ...context.info.git, branch, head, detached: !branch && Boolean(head) } };
+    return context.info;
+  }
 }

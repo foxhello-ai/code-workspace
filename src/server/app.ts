@@ -99,7 +99,10 @@ export async function buildApp(options: { disableAuth?: boolean } = {}) {
 
   app.get("/api/git/repository", async (request) => ({ data: workspace.get().info.git, requestId: request.id }));
   app.get("/api/git/status", async (request) => ({ data: await git.status(), requestId: request.id }));
+  app.get("/api/git/branches", async (request) => ({ data: await git.branches(), requestId: request.id }));
+  app.post<{ Body: { name: string; kind: "local" | "remote"; allowDirty?: boolean } }>("/api/git/switch", async (request) => ({ data: await git.switchBranch(request.body.name, request.body.kind, Boolean(request.body.allowDirty)), requestId: request.id }));
   app.get<{ Querystring: { cursor?: string; limit?: string } }>("/api/git/history", async (request) => ({ data: await git.history(request.query.cursor, Number(request.query.limit ?? 50)), requestId: request.id }));
+  app.get<{ Querystring: { cursor?: string; limit?: string } }>("/api/git/graph", async (request) => ({ data: await git.graph(Number(request.query.cursor ?? 0), Number(request.query.limit ?? 100)), requestId: request.id }));
   app.get<{ Params: { hash: string } }>("/api/git/commits/:hash", async (request) => ({ data: await git.commit(request.params.hash), requestId: request.id }));
   app.get<{ Querystring: { scope?: "working" | "staged" | "all"; path?: string } }>("/api/git/diff", async (request) => ({ data: await git.diff(request.query.scope ?? "all", request.query.path), requestId: request.id }));
   app.get<{ Params: { hash: string }; Querystring: { path?: string } }>("/api/git/diff/commits/:hash", async (request) => ({ data: await git.diff("commit", request.query.path, request.params.hash), requestId: request.id }));

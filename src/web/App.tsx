@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, ChevronDown, ChevronRight, ChevronsRight, Clock3, File, Folder, FolderOpen, GitBranch, History, LockKeyhole, LogOut, RefreshCw, Save, X, Files, GitCompare, Layers2, Plus, Trash2, XCircle } from "lucide-react";
-import type { DiffDocument, FileTreeEntry, GitChangedFile, GitCommitDetail, GitCommitSummary } from "../shared/contracts";
+import { ArrowRight, ChevronDown, ChevronRight, ChevronsRight, Clock3, File, Folder, FolderOpen, GitBranch, GitFork, History, List, LockKeyhole, LogOut, RefreshCw, Save, Search, X, Files, GitCompare, Layers2, Plus, Trash2, XCircle } from "lucide-react";
+import type { DiffDocument, FileTreeEntry, GitBranchInfo, GitChangedFile, GitCommitDetail, GitCommitSummary, GitGraphCommit } from "../shared/contracts";
 import { api, ApiClientError } from "./api";
 import { type TextTab, useAppStore } from "./store";
 
@@ -119,6 +119,22 @@ export function App() {
     } catch (error) { setNotice(`关闭工作区失败：${message(error)}`); }
     finally { setSwitchingWorkspace(false); }
   }
+  async function switchBranch(branch: GitBranchInfo) {
+    if (store.tabs.some((tab) => tab.type === "text" && tab.dirty) && !confirm("存在未保存文件。切换分支可能改变磁盘内容，确定继续吗？")) return;
+    setNotice(`正在切换到 ${branch.name}…`);
+    try {
+      let result;
+      try { result = await api.switchBranch(branch.name, branch.kind); }
+      catch (error) {
+        if (!(error instanceof ApiClientError) || error.code !== "GIT_WORKTREE_DIRTY" || !confirm("Git 工作区存在未提交修改。是否尝试保留这些修改并切换分支？")) throw error;
+        result = await api.switchBranch(branch.name, branch.kind, true);
+      }
+      store.setWorkspace(result.workspace);
+      store.markDiffsStale();
+      await queryClient.invalidateQueries();
+      setNotice(`已切换到 ${result.workspace.git?.branch ?? branch.name}`);
+    } catch (error) { setNotice(`分支切换失败：${message(error)}`); }
+  }
   async function save(tab: TextTab, version = tab.diskVersion) {
     try { const file = await api.save(tab.path, tab.bufferText, version); store.saved(tab.id, file); setNotice("已保存"); }
     catch (error) {
@@ -134,7 +150,9 @@ export function App() {
   return <div className="app-shell">
     <header className="topbar">
       <div className="brand">Code Workspace</div><div className="workspace-name">{store.workspace.name}</div>
-      {store.workspace.git && <div className="branch"><GitBranch size={14}/>{store.workspace.git.branch ?? "detached"}</div>}
+      {store.workspace.git && (
+        <BranchPicker current={store.workspace.git.branch} onSwitch={switchBranch}/>
+      )}
       <button className="icon-button" title="刷新" onClick={() => queryClient.invalidateQueries()}><RefreshCw size={16}/></button>
       <button className="close-workspace" disabled={switchingWorkspace} onClick={switchWorkspace}>{switchingWorkspace ? "正在切换…" : "切换工作区"}</button>
       <button className="logout-button" title="退出登录" onClick={async () => { await api.logout(); store.clear(); queryClient.clear(); setAuthenticated(false); }}><LogOut size={15}/></button>
@@ -254,13 +272,57 @@ function Changes({ onDiff }: { onDiff(scope: "working" | "staged" | "all", path:
 function ChangeRow({ file, onClick }: { file: GitChangedFile; onClick(): void }) { return <button className="change-row" onClick={onClick}><span>{file.path.split("/").at(-1)}</span><small>{file.path.includes("/") ? file.path.slice(0, file.path.lastIndexOf("/")) : ""}{file.additions !== undefined && ` · +${file.additions} -${file.deletions ?? 0}`}</small><em>{file.worktreeStatus !== "." ? file.worktreeStatus : file.indexStatus}</em></button>; }
 
 function HistoryPanel({ onDiff }: { onDiff(hash: string, path?: string): void }) {
+  const [mode, setMode] = useState<"list" | "graph">("graph");
   const [commits, setCommits] = useState<GitCommitSummary[]>([]); const [cursor, setCursor] = useState<string | null | undefined>(); const [selected, setSelected] = useState<string>();
-  const page = useQuery({ queryKey: ["git", "history", cursor ?? "first"], queryFn: () => api.history(cursor ?? undefined), retry: false });
+  const page = useQuery({ queryKey: ["git", "history", cursor ?? "first"], queryFn: () => api.history(cursor ?? undefined), retry: false, enabled: mode === "list" });
   useEffect(() => { if (page.data) setCommits((current) => cursor ? [...current, ...page.data.items.filter((x) => !current.some((y) => y.hash === x.hash))] : page.data.items); }, [page.data]);
   const detail = useQuery({ queryKey: ["git", "commit", selected], queryFn: () => api.commit(selected!), enabled: Boolean(selected) });
   if (page.isError) return <PanelError text={message(page.error)}/>;
-  return <><PanelTitle title="Git 历史"/>{selected && detail.data ? <CommitDetails detail={detail.data} back={() => setSelected(undefined)} diff={onDiff}/> : <div className="history-list">{commits.map((commit) => <button key={commit.hash} onClick={() => setSelected(commit.hash)}><strong>{commit.subject}</strong><span><code>{commit.shortHash}</code>{commit.authorName}</span><time>{new Date(commit.committedAt).toLocaleString()}</time>{commit.parents.length > 1 && <em>merge</em>}</button>)}{page.data?.nextCursor && <button className="load-more" onClick={() => setCursor(page.data!.nextCursor)}>加载更多</button>}</div>}</>;
+  return <><PanelTitle title="Git 历史"><div className="history-modes"><button className={mode === "graph" ? "active" : ""} title="提交图" onClick={() => { setMode("graph"); setSelected(undefined); }}><GitFork/></button><button className={mode === "list" ? "active" : ""} title="线性列表" onClick={() => { setMode("list"); setSelected(undefined); }}><List/></button></div></PanelTitle>{selected && detail.data ? <CommitDetails detail={detail.data} back={() => setSelected(undefined)} diff={onDiff}/> : mode === "graph" ? <CommitGraph onSelect={setSelected}/> : <div className="history-list">{commits.map((commit) => <button key={commit.hash} onClick={() => setSelected(commit.hash)}><strong>{commit.subject}</strong><span><code>{commit.shortHash}</code>{commit.authorName}</span><time>{new Date(commit.committedAt).toLocaleString()}</time>{commit.parents.length > 1 && <em>merge</em>}</button>)}{page.data?.nextCursor && <button className="load-more" onClick={() => setCursor(page.data!.nextCursor)}>加载更多</button>}</div>}</>;
 }
+
+function BranchPicker({ current, onSwitch }: { current: string | null; onSwitch(branch: GitBranchInfo): void }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const query = useQuery({ queryKey: ["git", "branches"], queryFn: api.branches, enabled: open });
+  const filtered = (query.data ?? []).filter((branch) => branch.name.toLowerCase().includes(search.toLowerCase()));
+  return <div className="branch-picker"><button className="branch" onClick={() => setOpen((value) => !value)}><GitBranch size={14}/><span>{current ?? "detached"}</span><ChevronDown size={13}/></button>{open && <div className="branch-popover"><label><Search/><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索分支"/></label><div className="branch-list">{["local", "remote"].map((kind) => { const entries = filtered.filter((branch) => branch.kind === kind); return entries.length ? <section key={kind}><h4>{kind === "local" ? "本地分支" : "远程分支"}</h4>{entries.map((branch) => <button key={branch.fullName} className={branch.current ? "current" : ""} onClick={() => { setOpen(false); onSwitch(branch); }}><GitBranch/><span>{branch.name}</span>{branch.current && <em>当前</em>}</button>)}</section> : null; })}{query.isLoading && <div className="panel-empty">加载分支…</div>}{query.isError && <div className="panel-empty error">{message(query.error)}</div>}</div></div>}</div>;
+}
+
+function CommitGraph({ onSelect }: { onSelect(hash: string): void }) {
+  const [commits, setCommits] = useState<GitGraphCommit[]>([]);
+  const [cursor, setCursor] = useState(0);
+  const query = useQuery({ queryKey: ["git", "graph", cursor], queryFn: () => api.graph(cursor) });
+  useEffect(() => { if (query.data) setCommits((current) => cursor ? [...current, ...query.data.items.filter((item) => !current.some((existing) => existing.hash === item.hash))] : query.data.items); }, [query.data]);
+  const layout = useMemo(() => layoutCommitGraph(commits), [commits]);
+  if (query.isError) return <PanelError text={message(query.error)}/>;
+  return <div className="commit-graph" style={{ "--graph-width": `${layout.width}px` } as React.CSSProperties}><svg width={layout.width} height={commits.length * 60} aria-hidden="true">{layout.edges.map((edge, index) => <path key={index} d={`M ${edge.x1} ${edge.y1} C ${edge.x1} ${(edge.y1 + edge.y2) / 2}, ${edge.x2} ${(edge.y1 + edge.y2) / 2}, ${edge.x2} ${edge.y2}`} stroke={graphColor(edge.color)} fill="none" strokeWidth="2"/>)}{layout.nodes.map((node) => <circle key={node.hash} cx={node.x} cy={node.y} r="4.5" fill="#11161d" stroke={graphColor(node.lane)} strokeWidth="2.5"/>)}</svg><div className="graph-rows">{commits.map((commit) => <button key={commit.hash} onClick={() => onSelect(commit.hash)}><strong>{commit.subject}</strong><div className="graph-decorations">{commit.decorations.map((decoration, index) => <em className={decoration.type} key={`${decoration.name}:${index}`}>{decoration.type === "head" && "HEAD · "}{decoration.name}</em>)}</div><span><code>{commit.shortHash}</code>{commit.authorName} · {new Date(commit.committedAt).toLocaleDateString()}</span></button>)}{query.data?.nextCursor !== null && query.data?.nextCursor !== undefined && <button className="graph-load" onClick={() => setCursor(query.data!.nextCursor!)}>加载更多提交</button>}</div></div>;
+}
+
+function layoutCommitGraph(commits: GitGraphCommit[]) {
+  const lanes: string[] = [];
+  const nodes: Array<{ hash: string; lane: number; x: number; y: number }> = [];
+  const positions = new Map<string, { lane: number; row: number }>();
+  commits.forEach((commit, row) => {
+    let lane = lanes.indexOf(commit.hash);
+    if (lane < 0) { lane = lanes.findIndex((item) => !item); if (lane < 0) lane = lanes.length; lanes[lane] = commit.hash; }
+    positions.set(commit.hash, { lane, row });
+    const firstParent = commit.parents[0];
+    if (!firstParent) lanes[lane] = "";
+    else {
+      const existing = lanes.indexOf(firstParent);
+      if (existing >= 0 && existing !== lane) lanes[lane] = ""; else lanes[lane] = firstParent;
+    }
+    for (const parent of commit.parents.slice(1)) if (!lanes.includes(parent)) { let target = lanes.findIndex((item) => !item); if (target < 0) target = lanes.length; lanes[target] = parent; }
+  });
+  const width = Math.max(42, (Math.max(0, ...Array.from(positions.values()).map((item) => item.lane)) + 1) * 16 + 20);
+  for (const [hash, position] of positions) nodes.push({ hash, lane: position.lane, x: 14 + position.lane * 16, y: position.row * 60 + 30 });
+  const edges: Array<{ x1: number; y1: number; x2: number; y2: number; color: number }> = [];
+  for (const commit of commits) { const from = positions.get(commit.hash)!; for (const parent of commit.parents) { const to = positions.get(parent); if (to) edges.push({ x1: 14 + from.lane * 16, y1: from.row * 60 + 30, x2: 14 + to.lane * 16, y2: to.row * 60 + 30, color: to.lane }); } }
+  return { width, nodes, edges };
+}
+
+function graphColor(index: number) { return ["#58a6ff", "#3fb950", "#d29922", "#bc8cff", "#f778ba", "#39c5cf", "#ff7b72"][index % 7]; }
 
 function CommitDetails({ detail, back, diff }: { detail: GitCommitDetail; back(): void; diff(hash: string, path?: string): void }) { return <div className="commit-detail"><button className="back" onClick={back}>← 返回历史</button><h3>{detail.subject}</h3><code>{detail.hash}</code><p>{detail.body}</p><div className="commit-meta">{detail.authorName} · {new Date(detail.committedAt).toLocaleString()} · +{detail.additions} -{detail.deletions}</div>{detail.files.map((file) => <button className="commit-file" key={`${file.status}:${file.path}`} onClick={() => diff(detail.hash, file.path)}><em>{file.status[0]}</em><span>{file.path}</span></button>)}</div>; }
 

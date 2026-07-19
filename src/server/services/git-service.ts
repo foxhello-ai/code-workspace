@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { DiffDocument, DiffFile, DiffScope, GitChangedFile, GitCommitDetail, GitCommitSummary, GitState, GitStatusSnapshot } from "../../shared/contracts.js";
+import type { DiffDocument, DiffFile, DiffScope, GitBranchInfo, GitChangedFile, GitCommitDetail, GitCommitSummary, GitGraphCommit, GitState, GitStatusSnapshot } from "../../shared/contracts.js";
 import { AppError } from "../errors.js";
 import { GitRunner } from "../infrastructure/git-runner.js";
 import { WorkspaceService } from "./workspace-service.js";
@@ -80,6 +80,62 @@ export class GitService {
     const { runner } = this.context();
     const output = await runner.text(["check-ignore", "--no-index", "-z", "--", ...paths], { allowFailure: true });
     return new Set(output.split("\0").filter(Boolean));
+  }
+
+  async branches() {
+    const { runner } = this.context();
+    const format = "%(refname)%00%(refname:short)%00%(objectname)%00%(HEAD)%00%(upstream:short)%00";
+    const raw = await runner.text(["for-each-ref", `--format=${format}`, "refs/heads", "refs/remotes"]);
+    const fields = raw.split("\0");
+    const items: GitBranchInfo[] = [];
+    for (let index = 0; index + 4 < fields.length; index += 5) {
+      const fullName = fields[index].replace(/^\n+/, "");
+      if (!fullName || fullName.endsWith("/HEAD")) continue;
+      const shortName = fields[index + 1];
+      const kind = fullName.startsWith("refs/remotes/") ? "remote" : "local";
+      items.push({ name: shortName, fullName, kind, target: fields[index + 2], current: fields[index + 3].trim() === "*", upstream: fields[index + 4] || undefined });
+    }
+    return items.sort((a, b) => Number(b.current) - Number(a.current) || a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name));
+  }
+
+  async switchBranch(name: string, kind: "local" | "remote", allowDirty = false) {
+    const { runner } = this.context();
+    const branches = await this.branches();
+    const target = branches.find((branch) => branch.name === name && branch.kind === kind);
+    if (!target) throw new AppError(404, "BRANCH_NOT_FOUND", "分支不存在或已发生变化");
+    const before = await this.status(true);
+    if (!before.clean && !allowDirty) throw new AppError(409, "GIT_WORKTREE_DIRTY", "工作区存在未提交修改，确认保留修改后才能切换", { files: before.files.length });
+    if (target.current) return { workspace: this.workspace.get().info, status: before };
+    if (kind === "local") await runner.run(["switch", "--", target.name], { write: true, timeoutMs: 30_000 });
+    else {
+      const localName = target.name.includes("/") ? target.name.slice(target.name.indexOf("/") + 1) : target.name;
+      const localExists = branches.some((branch) => branch.kind === "local" && branch.name === localName);
+      if (localExists) await runner.run(["switch", "--", localName], { write: true, timeoutMs: 30_000 });
+      else await runner.run(["switch", "--track", target.name], { write: true, timeoutMs: 30_000 });
+    }
+    this.invalidate();
+    const workspace = await this.workspace.refreshGitInfo();
+    const status = await this.status(true);
+    return { workspace, status };
+  }
+
+  async graph(cursor = 0, limit = 100) {
+    const { runner } = this.context();
+    const skip = Math.max(0, cursor);
+    const bounded = Math.max(1, Math.min(limit, 200));
+    const format = "%H%x1f%h%x1f%P%x1f%s%x1f%an%x1f%ae%x1f%aI%x1f%cI%x1f%D%x1e";
+    const text = await runner.text(["log", "--all", "--topo-order", "--date-order", `--skip=${skip}`, `--max-count=${bounded}`, `--format=${format}`], { allowFailure: true, timeoutMs: 30_000 });
+    const items = text.split("\x1e").map((record) => record.trim()).filter(Boolean).map((record): GitGraphCommit => {
+      const [hash, shortHash, parents, subject, authorName, authorEmail, authoredAt, committedAt, decorationText = ""] = record.split("\x1f");
+      const decorations = decorationText.split(", ").map((item) => item.trim()).filter(Boolean).map((item) => {
+        if (item.startsWith("HEAD -> ")) return { type: "head" as const, name: item.slice(8) };
+        if (item.startsWith("tag: ")) return { type: "tag" as const, name: item.slice(5) };
+        if (item.startsWith("origin/") || item.includes("/")) return { type: "remote" as const, name: item };
+        return { type: "local" as const, name: item };
+      });
+      return { hash, shortHash, parents: parents ? parents.split(" ") : [], subject, authorName, authorEmail, authoredAt, committedAt, decorations };
+    });
+    return { items, nextCursor: items.length === bounded ? skip + bounded : null, head: (await this.status()).head };
   }
 
   async fileState(relative: string): Promise<GitState> {

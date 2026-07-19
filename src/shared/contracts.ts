@@ -67,6 +67,19 @@ export interface GitCommitSummary {
   committedAt: string;
 }
 
+export interface GitBranchInfo {
+  name: string;
+  fullName: string;
+  kind: "local" | "remote";
+  current: boolean;
+  target: string;
+  upstream?: string;
+}
+
+export interface GitGraphCommit extends GitCommitSummary {
+  decorations: Array<{ type: "head" | "local" | "remote" | "tag" | "other"; name: string }>;
+}
+
 export interface GitCommitDetail extends GitCommitSummary {
   body: string;
   committerName: string;

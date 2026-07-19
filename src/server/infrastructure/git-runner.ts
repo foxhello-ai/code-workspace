@@ -5,12 +5,12 @@ import { AppError } from "../errors.js";
 export class GitRunner {
   constructor(private cwd: string) {}
 
-  run(args: string[], options: { allowFailure?: boolean; timeoutMs?: number } = {}): Promise<Buffer> {
+  run(args: string[], options: { allowFailure?: boolean; timeoutMs?: number; write?: boolean } = {}): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       const child = spawn("git", args, {
         cwd: this.cwd,
         shell: false,
-        env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" },
+        env: { ...process.env, ...(options.write ? {} : { GIT_OPTIONAL_LOCKS: "0" }), LC_ALL: "C" },
         stdio: ["ignore", "pipe", "pipe"]
       });
       const stdout: Buffer[] = [];
@@ -32,5 +32,5 @@ export class GitRunner {
     });
   }
 
-  async text(args: string[], options?: { allowFailure?: boolean; timeoutMs?: number }) { return (await this.run(args, options)).toString("utf8"); }
+  async text(args: string[], options?: { allowFailure?: boolean; timeoutMs?: number; write?: boolean }) { return (await this.run(args, options)).toString("utf8"); }
 }
