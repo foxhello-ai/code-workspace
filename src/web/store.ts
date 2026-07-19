@@ -16,7 +16,8 @@ export interface TextTab {
 }
 
 export interface DiffTab { id: string; type: "diff"; title: string; oldText: string; newText: string; language: string; stale: boolean }
-export type Tab = TextTab | DiffTab;
+export interface ImageTab { id: string; type: "image"; path: string; version: string; externalState: "current" | "deleted" }
+export type Tab = TextTab | DiffTab | ImageTab;
 
 interface AppState {
   workspace: WorkspaceInfo | null;
@@ -24,6 +25,7 @@ interface AppState {
   activeId: string | null;
   setWorkspace(workspace: WorkspaceInfo | null): void;
   openFile(file: FileContent): void;
+  openImage(file: FileContent): void;
   openDiff(tab: Omit<DiffTab, "id" | "stale"> & { id?: string }): void;
   closeTab(id: string): boolean;
   closeOtherTabs(id: string): boolean;
@@ -33,6 +35,7 @@ interface AppState {
   edit(id: string, text: string): void;
   saved(id: string, file: FileContent): void;
   external(path: string, file: FileContent | null): void;
+  refreshImage(path: string, file: FileContent | null): void;
   markDiffsStale(): void;
   clear(): void;
 }
@@ -46,6 +49,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     const id = `file:${file.path}`;
     const text = file.content ?? "";
     return { tabs: [...state.tabs, { id, type: "text", path: file.path, savedText: text, bufferText: text, diskVersion: file.version, language: file.language ?? "plaintext", dirty: false, externalState: "current" }], activeId: id };
+  }),
+  openImage: (file) => set((state) => {
+    const existing = state.tabs.find((tab) => tab.type === "image" && tab.path === file.path);
+    if (existing) return { activeId: existing.id };
+    const id = `image:${file.path}`;
+    return { tabs: [...state.tabs, { id, type: "image", path: file.path, version: file.version, externalState: "current" }], activeId: id };
   }),
   openDiff: (tab) => set((state) => {
     const id = tab.id ?? `diff:${tab.title}`;
@@ -93,6 +102,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const text = file.content ?? "";
     return { ...tab, savedText: text, bufferText: text, diskVersion: file.version, externalState: "current" };
   }) })),
+  refreshImage: (path, file) => set((state) => ({ tabs: state.tabs.map((tab) => tab.type === "image" && tab.path === path ? file ? { ...tab, version: file.version, externalState: "current" } : { ...tab, externalState: "deleted" } : tab) })),
   markDiffsStale: () => set((state) => ({ tabs: state.tabs.map((tab) => tab.type === "diff" ? { ...tab, stale: true } : tab) })),
   clear: () => set({ workspace: null, tabs: [], activeId: null })
 }));

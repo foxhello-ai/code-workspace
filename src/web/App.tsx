@@ -42,10 +42,10 @@ export function App() {
       if (!event) { if (envelope.type === "workspace.resyncRequired") { queryClient.invalidateQueries(); store.markDiffsStale(); } return; }
       if (event.type.startsWith("file.") && event.path) {
         queryClient.invalidateQueries({ queryKey: ["tree"] });
-        const tab = store.tabs.find((t) => t.type === "text" && t.path === event.path);
+        const tab = store.tabs.find((t) => (t.type === "text" || t.type === "image") && t.path === event.path);
         if (tab) {
-          if (event.type === "file.deleted") store.external(event.path, null);
-          else api.file(event.path).then((file) => store.external(event.path!, file)).catch(() => undefined);
+          if (event.type === "file.deleted") tab.type === "image" ? store.refreshImage(event.path, null) : store.external(event.path, null);
+          else api.file(event.path).then((file) => tab.type === "image" ? store.refreshImage(event.path!, file) : store.external(event.path!, file)).catch(() => undefined);
         }
       }
       if (event.type.startsWith("directory.")) queryClient.invalidateQueries({ queryKey: ["tree"] });
@@ -134,7 +134,7 @@ export function App() {
     </aside>
     <aside className="sidebar">
       {view === "files" && <Explorer
-        onOpen={async (path) => { try { const file = await api.file(path); if (file.binary) setNotice("二进制文件不能使用文本编辑器打开"); else if (file.content === null) setNotice("文件过大或编码不受支持，已阻止编辑"); else store.openFile(file); } catch (e) { setNotice(message(e)); } }}
+        onOpen={async (path) => { try { const file = await api.file(path); if (file.binary && isPreviewableImage(path)) store.openImage(file); else if (file.binary) setNotice("该二进制文件暂不支持预览"); else if (file.content === null) setNotice("文件过大或编码不受支持，已阻止编辑"); else store.openFile(file); } catch (e) { setNotice(message(e)); } }}
         onNotice={setNotice}
       />}
       {view === "changes" && <Changes onDiff={(scope, path) => openDiff(api.diff(scope, path), `${scope}: ${path}`)} />}
@@ -143,7 +143,7 @@ export function App() {
     <main className="editor-area">
       <div className="tab-strip">
         <div className="tabs">{store.tabs.map((tab) => <div key={tab.id} className={`tab ${tab.id === store.activeId ? "active" : ""}`} onClick={() => store.activate(tab.id)}>
-          <span>{tab.type === "text" ? tab.path.split("/").at(-1) : tab.title}</span>{tab.type === "text" && tab.dirty && <i>●</i>}{tab.type === "text" && tab.externalState !== "current" && <b>!</b>}{tab.type === "diff" && tab.stale && <b>!</b>}<button title="关闭当前 (Ctrl/Cmd+W)" onClick={(e) => { e.stopPropagation(); store.closeTab(tab.id); }}><X size={13}/></button>
+          <span>{tab.type === "diff" ? tab.title : tab.path.split("/").at(-1)}</span>{tab.type === "text" && tab.dirty && <i>●</i>}{(tab.type === "text" || tab.type === "image") && tab.externalState !== "current" && <b>!</b>}{tab.type === "diff" && tab.stale && <b>!</b>}<button title="关闭当前 (Ctrl/Cmd+W)" onClick={(e) => { e.stopPropagation(); store.closeTab(tab.id); }}><X size={13}/></button>
         </div>)}</div>
         <div className="tab-actions">
           <button disabled={!store.activeId || store.tabs.length < 2} title="关闭其他 (Alt+Shift+O)" onClick={() => store.activeId && store.closeOtherTabs(store.activeId)}><Layers2/></button>
@@ -170,6 +170,7 @@ export function App() {
             />}
       </>}
       {active?.type === "diff" && <><div className={`editor-toolbar ${active.stale ? "stale" : ""}`}><span>{active.title}</span>{active.stale && <span>Git 状态已变化，请重新打开此 Diff</span>}</div><DiffEditor height="100%" theme="vs-dark" original={active.oldText} modified={active.newText} language={active.language} options={{ readOnly: true, originalEditable: false, automaticLayout: true, renderSideBySide: window.innerWidth > 800 }}/></>}
+      {active?.type === "image" && <><div className="editor-toolbar"><span>{active.path}</span><span>图片预览</span></div><div className="image-preview">{active.externalState === "deleted" ? <div className="image-missing">图片已从磁盘删除</div> : <img src={`/api/files/raw?path=${encodeURIComponent(active.path)}&v=${encodeURIComponent(active.version)}`} alt={active.path}/>}</div></>}
     </main>
     <footer className="statusbar"><span>{notice || "就绪"}</span><span>{active?.type === "text" ? `${active.dirty ? "未保存" : "已保存"} · ${active.externalState}` : ""}</span></footer>
   </div>;
@@ -244,3 +245,4 @@ function PanelTitle({ title, children }: { title: string; children?: React.React
 function PanelError({ text }: { text: string }) { return <div className="panel-empty error">{text}</div>; }
 function languageFor(path: string) { const ext = path.split(".").at(-1); return ({ ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript", json: "json", md: "markdown", css: "css", html: "html", py: "python", yml: "yaml", yaml: "yaml" } as Record<string, string>)[ext ?? ""] ?? "plaintext"; }
 function stateLetter(state: string) { return ({ modified: "M", added: "A", deleted: "D", renamed: "R", untracked: "U", conflicted: "C" } as Record<string, string>)[state] ?? ""; }
+function isPreviewableImage(path: string) { return /\.(png|jpe?g|gif|webp|bmp|ico)$/i.test(path); }

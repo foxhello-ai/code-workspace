@@ -57,6 +57,15 @@ describe("workspace API", () => {
     expect(response.json().data.content).toBe(content);
   });
 
+  it("serves PNG files through the guarded raw preview endpoint", async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+    await writeFile(path.join(root, "image.png"), png);
+    const response = await app.inject({ method: "GET", url: "/api/files/raw?path=image.png" });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toBe("image/png");
+    expect(response.rawPayload).toEqual(png);
+  });
+
   it("reports unstaged, staged and untracked changes and diff content", async () => {
     await writeFile(path.join(root, "hello.txt"), "changed\n");
     await writeFile(path.join(root, "new.txt"), "new\n");
