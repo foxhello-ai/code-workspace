@@ -16,7 +16,7 @@ beforeEach(async () => {
   await writeFile(path.join(root, "hello.txt"), "one\n");
   execFileSync("git", ["add", "hello.txt"], { cwd: root });
   execFileSync("git", ["commit", "-qm", "initial"], { cwd: root });
-  app = await buildApp();
+  app = await buildApp({ disableAuth: true });
   await app.inject({ method: "POST", url: "/api/workspace/open", payload: { path: root } });
 });
 

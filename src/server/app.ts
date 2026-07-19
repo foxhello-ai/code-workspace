@@ -11,14 +11,16 @@ import { FileService } from "./services/file-service.js";
 import { GitService } from "./services/git-service.js";
 import { EventHub } from "./services/event-hub.js";
 import { WatchService } from "./services/watch-service.js";
+import { AuthService } from "./services/auth-service.js";
 
-export async function buildApp() {
+export async function buildApp(options: { disableAuth?: boolean } = {}) {
   const app = Fastify({ logger: true, bodyLimit: 12 * 1024 * 1024, genReqId: () => crypto.randomUUID() });
   await app.register(websocket);
   const workspace = new WorkspaceService();
   const git = new GitService(workspace);
   const hub = new EventHub();
   const watcher = new WatchService(workspace, git, hub);
+  const auth = new AuthService();
   const files = new FileService(workspace, () => null);
   workspace.onChange = async (context) => { await watcher.stop(); git.invalidate(); hub.clear(); if (context) await watcher.start(); };
 
@@ -28,7 +30,22 @@ export async function buildApp() {
     reply.status(appError.status).send({ error: { code: appError.code, message: appError.message, details: appError.details }, requestId: request.id });
   });
 
+  const isSecure = (request: { headers: Record<string, unknown> }) => request.headers["x-forwarded-proto"] === "https";
+  app.addHook("onRequest", async (request, reply) => {
+    const publicApi = request.url === "/health" || request.url.startsWith("/api/auth/");
+    if (!options.disableAuth && request.url.startsWith("/api/") && !publicApi && !auth.isAuthenticated(request.headers.cookie)) {
+      return reply.status(401).send({ error: { code: "AUTH_REQUIRED", message: "请先登录" }, requestId: request.id });
+    }
+  });
+
   app.get("/health", async () => ({ ok: true }));
+  app.get("/api/auth/status", async (request) => ({ data: { authenticated: auth.isAuthenticated(request.headers.cookie) }, requestId: request.id }));
+  app.post<{ Body: { password: string } }>("/api/auth/login", async (request, reply) => {
+    const result = auth.login(request.body?.password ?? "", request.ip);
+    if (!result.ok) return reply.status(result.blocked ? 429 : 401).send({ error: { code: result.blocked ? "AUTH_RATE_LIMITED" : "INVALID_PASSWORD", message: result.blocked ? `尝试次数过多，请 ${result.retryAfter} 秒后重试` : "密码错误" }, requestId: request.id });
+    return reply.header("set-cookie", auth.cookie(isSecure(request))).send({ data: { authenticated: true }, requestId: request.id });
+  });
+  app.post("/api/auth/logout", async (request, reply) => reply.header("set-cookie", auth.clearCookie(isSecure(request))).send({ data: { authenticated: false }, requestId: request.id }));
   app.post<{ Body: { path: string } }>("/api/workspace/open", async (request) => ({ data: await workspace.open(request.body.path), requestId: request.id }));
   app.get("/api/workspace", async (request) => ({ data: workspace.get().info, requestId: request.id }));
   app.post("/api/workspace/close", async (request) => { await workspace.close(); return { data: null, requestId: request.id }; });

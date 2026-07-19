@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, ChevronDown, ChevronRight, ChevronsRight, Clock3, File, Folder, FolderOpen, GitBranch, History, RefreshCw, Save, X, Files, GitCompare, Layers2, Plus, Trash2, XCircle } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronRight, ChevronsRight, Clock3, File, Folder, FolderOpen, GitBranch, History, LockKeyhole, LogOut, RefreshCw, Save, X, Files, GitCompare, Layers2, Plus, Trash2, XCircle } from "lucide-react";
 import type { DiffDocument, FileTreeEntry, GitChangedFile, GitCommitDetail, GitCommitSummary } from "../shared/contracts";
 import { api, ApiClientError } from "./api";
 import { type TextTab, useAppStore } from "./store";
@@ -25,9 +25,18 @@ export function App() {
   const [notice, setNotice] = useState("");
   const [recentWorkspaces, setRecentWorkspaces] = useState<string[]>(loadRecentWorkspaces);
   const [switchingWorkspace, setSwitchingWorkspace] = useState(false);
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const active = store.tabs.find((tab) => tab.id === store.activeId) ?? null;
 
-  useEffect(() => { api.workspace().then((workspace) => { store.setWorkspace(workspace); rememberWorkspace(workspace.rootPath); }).catch(() => undefined); }, []);
+  useEffect(() => {
+    api.authStatus().then(({ authenticated }) => {
+      setAuthenticated(authenticated);
+      if (authenticated) api.workspace().then((workspace) => { store.setWorkspace(workspace); rememberWorkspace(workspace.rootPath); }).catch(() => undefined);
+    }).catch(() => setAuthenticated(false));
+    const requireAuth = () => { store.clear(); queryClient.clear(); setAuthenticated(false); };
+    window.addEventListener("code-workspace:auth-required", requireAuth);
+    return () => window.removeEventListener("code-workspace:auth-required", requireAuth);
+  }, []);
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => { if (store.tabs.some((t) => t.type === "text" && t.dirty)) event.preventDefault(); };
     window.addEventListener("beforeunload", beforeUnload); return () => window.removeEventListener("beforeunload", beforeUnload);
@@ -119,13 +128,16 @@ export function App() {
     }
   }
 
-  if (!store.workspace) return <OpenWorkspace path={workspacePath} setPath={setWorkspacePath} open={openWorkspace} error={notice} recent={recentWorkspaces} removeRecent={removeRecentWorkspace} busy={switchingWorkspace} />;
+  if (authenticated === null) return <div className="auth-loading"><LockKeyhole/><span>正在验证登录状态…</span></div>;
+  if (!authenticated) return <LoginPage onLogin={() => { setAuthenticated(true); setNotice(""); }} />;
+  if (!store.workspace) return <OpenWorkspace path={workspacePath} setPath={setWorkspacePath} open={openWorkspace} error={notice} recent={recentWorkspaces} removeRecent={removeRecentWorkspace} busy={switchingWorkspace} logout={async () => { await api.logout(); setAuthenticated(false); }} />;
   return <div className="app-shell">
     <header className="topbar">
       <div className="brand">Code Workspace</div><div className="workspace-name">{store.workspace.name}</div>
       {store.workspace.git && <div className="branch"><GitBranch size={14}/>{store.workspace.git.branch ?? "detached"}</div>}
       <button className="icon-button" title="刷新" onClick={() => queryClient.invalidateQueries()}><RefreshCw size={16}/></button>
       <button className="close-workspace" disabled={switchingWorkspace} onClick={switchWorkspace}>{switchingWorkspace ? "正在切换…" : "切换工作区"}</button>
+      <button className="logout-button" title="退出登录" onClick={async () => { await api.logout(); store.clear(); queryClient.clear(); setAuthenticated(false); }}><LogOut size={15}/></button>
     </header>
     <aside className="activitybar">
       <NavButton active={view === "files"} title="文件" onClick={() => setView("files")}><Files/></NavButton>
@@ -195,8 +207,16 @@ export function App() {
   }
 }
 
-function OpenWorkspace({ path, setPath, open, error, recent, removeRecent, busy }: { path: string; setPath(v: string): void; open(path?: string): void; error: string; recent: string[]; removeRecent(path: string): void; busy: boolean }) {
-  return <div className="open-page"><div className="open-card"><div className="logo"><Files/></div><h1>Code Workspace</h1><p>打开一个本地目录，浏览、编辑并检查 Git 修改。</p><label>工作区绝对路径</label><div className="open-input-row"><input autoFocus value={path} disabled={busy} onChange={(e) => setPath(e.target.value)} onKeyDown={(e) => e.key === "Enter" && open()} placeholder="/home/user/project"/><button className="primary" disabled={busy} onClick={() => open()}>{busy ? "正在打开…" : "打开工作区"}</button></div>{error && <div className="error">{error}</div>}{recent.length > 0 && <section className="recent-workspaces"><h2><Clock3/>最近打开</h2>{recent.map((item) => <div className="recent-workspace" key={item}><button className="recent-open" disabled={busy} onClick={() => open(item)}><FolderOpen/><span><strong>{item.split("/").filter(Boolean).at(-1) ?? item}</strong><small>{item}</small></span><ArrowRight/></button><button className="recent-remove" title="从最近列表移除" onClick={() => removeRecent(item)}><X/></button></div>)}</section>}<small>最近路径只保存在当前浏览器。服务不会启动终端或管理任何外部工具会话。</small></div></div>;
+function OpenWorkspace({ path, setPath, open, error, recent, removeRecent, busy, logout }: { path: string; setPath(v: string): void; open(path?: string): void; error: string; recent: string[]; removeRecent(path: string): void; busy: boolean; logout(): void }) {
+  return <div className="open-page"><div className="open-card"><button className="open-logout" onClick={logout}><LogOut/>退出登录</button><div className="logo"><Files/></div><h1>Code Workspace</h1><p>打开一个本地目录，浏览、编辑并检查 Git 修改。</p><label>工作区绝对路径</label><div className="open-input-row"><input autoFocus value={path} disabled={busy} onChange={(e) => setPath(e.target.value)} onKeyDown={(e) => e.key === "Enter" && open()} placeholder="/home/user/project"/><button className="primary" disabled={busy} onClick={() => open()}>{busy ? "正在打开…" : "打开工作区"}</button></div>{error && <div className="error">{error}</div>}{recent.length > 0 && <section className="recent-workspaces"><h2><Clock3/>最近打开</h2>{recent.map((item) => <div className="recent-workspace" key={item}><button className="recent-open" disabled={busy} onClick={() => open(item)}><FolderOpen/><span><strong>{item.split("/").filter(Boolean).at(-1) ?? item}</strong><small>{item}</small></span><ArrowRight/></button><button className="recent-remove" title="从最近列表移除" onClick={() => removeRecent(item)}><X/></button></div>)}</section>}<small>最近路径只保存在当前浏览器。服务不会启动终端或管理任何外部工具会话。</small></div></div>;
+}
+
+function LoginPage({ onLogin }: { onLogin(): void }) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function login() { setBusy(true); setError(""); try { await api.login(password); onLogin(); } catch (reason) { setError(message(reason)); } finally { setBusy(false); } }
+  return <div className="open-page"><div className="login-card"><div className="logo"><LockKeyhole/></div><h1>登录 Code Workspace</h1><p>请输入全局访问密码。</p><label>密码</label><input autoFocus type="password" autoComplete="current-password" value={password} disabled={busy} onChange={(event) => setPassword(event.target.value)} onKeyDown={(event) => event.key === "Enter" && login()}/><button className="primary" disabled={busy || !password} onClick={login}>{busy ? "正在登录…" : "登录"}</button>{error && <div className="error">{error}</div>}</div></div>;
 }
 
 function NavButton({ active, title, onClick, children }: { active: boolean; title: string; onClick(): void; children: React.ReactNode }) { return <button className={active ? "active" : ""} title={title} onClick={onClick}>{children}</button>; }

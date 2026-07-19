@@ -11,12 +11,17 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     const error = body as ApiErrorBody | null;
-    throw new ApiClientError(response.status, error?.error.code ?? "REQUEST_FAILED", error?.error.message ?? "请求失败", error?.error.details);
+    const clientError = new ApiClientError(response.status, error?.error.code ?? "REQUEST_FAILED", error?.error.message ?? "请求失败", error?.error.details);
+    if (response.status === 401 && !url.startsWith("/api/auth/")) window.dispatchEvent(new Event("code-workspace:auth-required"));
+    throw clientError;
   }
   return body.data as T;
 }
 
 export const api = {
+  authStatus: () => request<{ authenticated: boolean }>("/api/auth/status"),
+  login: (password: string) => request<{ authenticated: boolean }>("/api/auth/login", { method: "POST", body: JSON.stringify({ password }) }),
+  logout: () => request<{ authenticated: boolean }>("/api/auth/logout", { method: "POST" }),
   workspace: () => request<WorkspaceInfo>("/api/workspace"),
   openWorkspace: (path: string) => request<WorkspaceInfo>("/api/workspace/open", { method: "POST", body: JSON.stringify({ path }) }),
   closeWorkspace: () => request<null>("/api/workspace/close", { method: "POST" }),
