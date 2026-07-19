@@ -63,7 +63,7 @@ npm run check
 | `GIT_TIMEOUT_MS` | `10000` | Git 查询超时 |
 | `GIT_MAX_OUTPUT_BYTES` | `52428800` | Git 输出上限 |
 | `WATCH_DEBOUNCE_MS` | `250` | Git 状态刷新防抖 |
-| `APP_PASSWORD` | 无 | 必填的全局访问密码，可放在未提交的 `.env` 中 |
+| `APP_PASSWORD` | `` | 全局访问密码，可通过环境变量或未提交的 `.env` 覆盖 |
 
 ## 安全边界
 
