@@ -66,6 +66,19 @@ describe("workspace API", () => {
     expect(response.rawPayload).toEqual(png);
   });
 
+  it("serves worktree and committed PNG versions for Git image diff", async () => {
+    const original = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01]);
+    const changed = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x02]);
+    await writeFile(path.join(root, "tracked.png"), original);
+    execFileSync("git", ["add", "tracked.png"], { cwd: root });
+    execFileSync("git", ["commit", "-qm", "add image"], { cwd: root });
+    await writeFile(path.join(root, "tracked.png"), changed);
+    const head = await app.inject({ method: "GET", url: "/api/git/image?source=head&path=tracked.png" });
+    const worktree = await app.inject({ method: "GET", url: "/api/git/image?source=worktree&path=tracked.png" });
+    expect(head.rawPayload).toEqual(original);
+    expect(worktree.rawPayload).toEqual(changed);
+  });
+
   it("reports unstaged, staged and untracked changes and diff content", async () => {
     await writeFile(path.join(root, "hello.txt"), "changed\n");
     await writeFile(path.join(root, "new.txt"), "new\n");

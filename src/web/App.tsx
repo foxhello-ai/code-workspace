@@ -143,7 +143,7 @@ export function App() {
     <main className="editor-area">
       <div className="tab-strip">
         <div className="tabs">{store.tabs.map((tab) => <div key={tab.id} className={`tab ${tab.id === store.activeId ? "active" : ""}`} onClick={() => store.activate(tab.id)}>
-          <span>{tab.type === "diff" ? tab.title : tab.path.split("/").at(-1)}</span>{tab.type === "text" && tab.dirty && <i>●</i>}{(tab.type === "text" || tab.type === "image") && tab.externalState !== "current" && <b>!</b>}{tab.type === "diff" && tab.stale && <b>!</b>}<button title="关闭当前 (Ctrl/Cmd+W)" onClick={(e) => { e.stopPropagation(); store.closeTab(tab.id); }}><X size={13}/></button>
+          <span>{tab.type === "diff" || tab.type === "imageDiff" ? tab.title : tab.path.split("/").at(-1)}</span>{tab.type === "text" && tab.dirty && <i>●</i>}{(tab.type === "text" || tab.type === "image") && tab.externalState !== "current" && <b>!</b>}{(tab.type === "diff" || tab.type === "imageDiff") && tab.stale && <b>!</b>}<button title="关闭当前 (Ctrl/Cmd+W)" onClick={(e) => { e.stopPropagation(); store.closeTab(tab.id); }}><X size={13}/></button>
         </div>)}</div>
         <div className="tab-actions">
           <button disabled={!store.activeId || store.tabs.length < 2} title="关闭其他 (Alt+Shift+O)" onClick={() => store.activeId && store.closeOtherTabs(store.activeId)}><Layers2/></button>
@@ -170,6 +170,7 @@ export function App() {
             />}
       </>}
       {active?.type === "diff" && <><div className={`editor-toolbar ${active.stale ? "stale" : ""}`}><span>{active.title}</span>{active.stale && <span>Git 状态已变化，请重新打开此 Diff</span>}</div><DiffEditor height="100%" theme="vs-dark" original={active.oldText} modified={active.newText} language={active.language} options={{ readOnly: true, originalEditable: false, automaticLayout: true, renderSideBySide: window.innerWidth > 800 }}/></>}
+      {active?.type === "imageDiff" && <><div className={`editor-toolbar ${active.stale ? "stale" : ""}`}><span>{active.title}</span>{active.stale && <span>Git 状态已变化，请重新打开此 Diff</span>}</div><div className="image-diff"><ImageDiffSide label={active.oldLabel} url={active.oldUrl}/><ImageDiffSide label={active.newLabel} url={active.newUrl}/></div></>}
       {active?.type === "image" && <><div className="editor-toolbar"><span>{active.path}</span><span>图片预览</span></div><div className="image-preview">{active.externalState === "deleted" ? <div className="image-missing">图片已从磁盘删除</div> : <img src={`/api/files/raw?path=${encodeURIComponent(active.path)}&v=${encodeURIComponent(active.version)}`} alt={active.path}/>}</div></>}
     </main>
     <footer className="statusbar"><span>{notice || "就绪"}</span><span>{active?.type === "text" ? `${active.dirty ? "未保存" : "已保存"} · ${active.externalState}` : ""}</span></footer>
@@ -180,7 +181,14 @@ export function App() {
       const diff = await promise;
       if (!diff.files.length) return setNotice("没有可显示的修改");
       const file = diff.files[0];
-      if (file.status === "binary") return setNotice("该文件是二进制文件");
+      if (file.binary) {
+        if (!isPreviewableImage(file.path)) return setNotice("该二进制文件暂不支持 Diff 预览");
+        const oldPath = file.oldPath ?? file.path;
+        const oldUrl = file.status === "added" ? undefined : diff.scope === "working" ? gitImageUrl("index", oldPath) : diff.scope === "staged" || diff.scope === "all" ? gitImageUrl("head", oldPath) : gitImageUrl("commit", oldPath, diff.base);
+        const newUrl = file.status === "deleted" ? undefined : diff.scope === "staged" ? gitImageUrl("index", file.path) : diff.scope === "working" || diff.scope === "all" ? gitImageUrl("worktree", file.path) : gitImageUrl("commit", file.path, diff.target);
+        store.openImageDiff({ id: `image-diff:${diff.id}:${file.path}`, type: "imageDiff", title, oldUrl, newUrl, oldLabel: diff.base, newLabel: diff.target });
+        return;
+      }
       if (file.truncated) return setNotice("Diff 内容超过显示限制");
       store.openDiff({ id: `diff:${diff.id}:${file.path}`, type: "diff", title, oldText: file.oldText ?? "", newText: file.newText ?? "", language: languageFor(file.path) });
     } catch (error) { setNotice(message(error)); }
@@ -246,3 +254,5 @@ function PanelError({ text }: { text: string }) { return <div className="panel-e
 function languageFor(path: string) { const ext = path.split(".").at(-1); return ({ ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript", json: "json", md: "markdown", css: "css", html: "html", py: "python", yml: "yaml", yaml: "yaml" } as Record<string, string>)[ext ?? ""] ?? "plaintext"; }
 function stateLetter(state: string) { return ({ modified: "M", added: "A", deleted: "D", renamed: "R", untracked: "U", conflicted: "C" } as Record<string, string>)[state] ?? ""; }
 function isPreviewableImage(path: string) { return /\.(png|jpe?g|gif|webp|bmp|ico)$/i.test(path); }
+function gitImageUrl(source: "worktree" | "index" | "head" | "commit", path: string, hash?: string) { return `/api/git/image?source=${source}&path=${encodeURIComponent(path)}${hash ? `&hash=${encodeURIComponent(hash)}` : ""}`; }
+function ImageDiffSide({ label, url }: { label: string; url?: string }) { return <section><header>{label}</header><div>{url ? <img src={url} alt={label}/> : <span>此版本中不存在图片</span>}</div></section>; }

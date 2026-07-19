@@ -16,8 +16,9 @@ export interface TextTab {
 }
 
 export interface DiffTab { id: string; type: "diff"; title: string; oldText: string; newText: string; language: string; stale: boolean }
+export interface ImageDiffTab { id: string; type: "imageDiff"; title: string; oldUrl?: string; newUrl?: string; oldLabel: string; newLabel: string; stale: boolean }
 export interface ImageTab { id: string; type: "image"; path: string; version: string; externalState: "current" | "deleted" }
-export type Tab = TextTab | DiffTab | ImageTab;
+export type Tab = TextTab | DiffTab | ImageDiffTab | ImageTab;
 
 interface AppState {
   workspace: WorkspaceInfo | null;
@@ -27,6 +28,7 @@ interface AppState {
   openFile(file: FileContent): void;
   openImage(file: FileContent): void;
   openDiff(tab: Omit<DiffTab, "id" | "stale"> & { id?: string }): void;
+  openImageDiff(tab: Omit<ImageDiffTab, "id" | "stale"> & { id?: string }): void;
   closeTab(id: string): boolean;
   closeOtherTabs(id: string): boolean;
   closeTabsToRight(id: string): boolean;
@@ -59,6 +61,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   openDiff: (tab) => set((state) => {
     const id = tab.id ?? `diff:${tab.title}`;
     const next: DiffTab = { ...tab, id, type: "diff", stale: false };
+    const index = state.tabs.findIndex((item) => item.id === id);
+    const tabs = index < 0 ? [...state.tabs, next] : state.tabs.map((item) => item.id === id ? next : item);
+    return { tabs, activeId: id };
+  }),
+  openImageDiff: (tab) => set((state) => {
+    const id = tab.id ?? `image-diff:${tab.title}`;
+    const next: ImageDiffTab = { ...tab, id, type: "imageDiff", stale: false };
     const index = state.tabs.findIndex((item) => item.id === id);
     const tabs = index < 0 ? [...state.tabs, next] : state.tabs.map((item) => item.id === id ? next : item);
     return { tabs, activeId: id };
@@ -103,6 +112,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     return { ...tab, savedText: text, bufferText: text, diskVersion: file.version, externalState: "current" };
   }) })),
   refreshImage: (path, file) => set((state) => ({ tabs: state.tabs.map((tab) => tab.type === "image" && tab.path === path ? file ? { ...tab, version: file.version, externalState: "current" } : { ...tab, externalState: "deleted" } : tab) })),
-  markDiffsStale: () => set((state) => ({ tabs: state.tabs.map((tab) => tab.type === "diff" ? { ...tab, stale: true } : tab) })),
+  markDiffsStale: () => set((state) => ({ tabs: state.tabs.map((tab) => tab.type === "diff" || tab.type === "imageDiff" ? { ...tab, stale: true } : tab) })),
   clear: () => set({ workspace: null, tabs: [], activeId: null })
 }));

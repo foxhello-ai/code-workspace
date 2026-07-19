@@ -65,6 +65,14 @@ export async function buildApp() {
     if (!mime) throw new AppError(415, "UNSUPPORTED_PREVIEW", "该文件类型不支持图片预览");
     return reply.header("content-type", mime).header("cache-control", "no-store").header("x-content-type-options", "nosniff").send(createReadStream(target.absolute));
   });
+  app.get<{ Querystring: { source: "worktree" | "index" | "head" | "commit"; path: string; hash?: string } }>("/api/git/image", async (request, reply) => {
+    const extension = path.extname(request.query.path).toLowerCase();
+    const mimeTypes: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp", ".ico": "image/x-icon" };
+    const mime = mimeTypes[extension];
+    if (!mime) throw new AppError(415, "UNSUPPORTED_PREVIEW", "该文件类型不支持图片预览");
+    const buffer = await git.image(request.query.source, request.query.path, request.query.hash);
+    return reply.header("content-type", mime).header("cache-control", "no-store").header("x-content-type-options", "nosniff").send(buffer);
+  });
   app.put<{ Body: { path: string; content: string; expectedVersion: string } }>("/api/files/content", async (request) => ({ data: await files.save(request.body.path, request.body.content, request.body.expectedVersion), requestId: request.id }));
   app.post<{ Body: { path: string; content?: string } }>("/api/files", async (request) => ({ data: await files.createFile(request.body.path, request.body.content), requestId: request.id }));
   app.post<{ Body: { path: string } }>("/api/directories", async (request) => { await files.createDirectory(request.body.path); return { data: null, requestId: request.id }; });

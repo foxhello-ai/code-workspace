@@ -138,6 +138,24 @@ export class GitService {
     return { binary: false, text: buffer.toString("utf8") };
   }
 
+  async image(source: "worktree" | "index" | "head" | "commit", filePath: string, hash?: string) {
+    const normalized = filePath.replaceAll("\\", "/");
+    if (!normalized || path.isAbsolute(normalized) || normalized.split("/").some((part) => part === "..") || normalized === ".git" || normalized.startsWith(".git/")) throw new AppError(400, "INVALID_PATH", "图片路径无效");
+    const { context, runner } = this.context();
+    let buffer: Buffer;
+    if (source === "worktree") {
+      const target = await context.guard.resolveExisting(normalized);
+      buffer = await readFile(target.absolute);
+    } else {
+      if (source === "commit" && (!hash || !validHash.test(hash))) throw new AppError(400, "INVALID_REVISION", "提交标识无效");
+      const spec = source === "index" ? `:${normalized}` : source === "head" ? `HEAD:${normalized}` : `${hash}:${normalized}`;
+      buffer = await runner.run(["show", spec], { allowFailure: true });
+    }
+    if (!buffer.length) throw new AppError(404, "IMAGE_VERSION_NOT_FOUND", "该版本中不存在此图片");
+    if (buffer.length > 25 * 1024 * 1024) throw new AppError(413, "FILE_TOO_LARGE", "图片超过 25 MiB 预览限制");
+    return buffer;
+  }
+
   async diff(scope: DiffScope, selectedPath?: string, hash?: string): Promise<DiffDocument> {
     const { context, runner } = this.context();
     let args: string[];
@@ -185,7 +203,7 @@ export class GitService {
       const max = 5 * 1024 * 1024;
       const tooLarge = (oldSide.text?.length ?? 0) + (newSide.text?.length ?? 0) > max;
       truncated ||= tooLarge;
-      files.push({ path: change.path, oldPath: change.oldPath, status: binary ? "binary" : change.status, oldText: binary || tooLarge ? undefined : oldSide.text, newText: binary || tooLarge ? undefined : newSide.text, truncated: tooLarge });
+      files.push({ path: change.path, oldPath: change.oldPath, status: change.status, binary, oldText: binary || tooLarge ? undefined : oldSide.text, newText: binary || tooLarge ? undefined : newSide.text, truncated: tooLarge });
     }
     return { id: createHash("sha1").update(`${scope}:${hash ?? ""}:${selectedPath ?? ""}:${this.revision}`).digest("hex"), scope, base, target, generatedAt: new Date().toISOString(), gitRevision: this.revision, truncated, files };
   }

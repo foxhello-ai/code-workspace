@@ -80,6 +80,7 @@ export interface DiffFile {
   path: string;
   oldPath?: string;
   status: "added" | "modified" | "deleted" | "renamed" | "binary";
+  binary?: boolean;
   additions?: number;
   deletions?: number;
   oldText?: string;
