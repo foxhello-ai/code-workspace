@@ -16,5 +16,5 @@ export const config = {
   gitTimeoutMs: Number(process.env.GIT_TIMEOUT_MS ?? 10_000),
   gitMaxOutputBytes: Number(process.env.GIT_MAX_OUTPUT_BYTES ?? 50 * 1024 * 1024),
   watchDebounceMs: Number(process.env.WATCH_DEBOUNCE_MS ?? 250),
-  appPassword: process.env.APP_PASSWORD ?? (process.env.NODE_ENV === "test" ? "test-password" : passwordFromEnvFile())
+  appPassword: process.env.APP_PASSWORD ?? (process.env.NODE_ENV === "test" ? "test-password" : passwordFromEnvFile() || "fmzh2026")
 };
