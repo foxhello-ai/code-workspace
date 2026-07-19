@@ -1,0 +1,178 @@
+import { useEffect, useMemo, useState } from "react";
+import Editor, { DiffEditor } from "@monaco-editor/react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronDown, ChevronRight, File, Folder, FolderOpen, GitBranch, History, RefreshCw, Save, X, Files, GitCompare, Plus, Trash2, Pencil } from "lucide-react";
+import type { DiffDocument, FileTreeEntry, GitChangedFile, GitCommitDetail, GitCommitSummary } from "../shared/contracts";
+import { api, ApiClientError } from "./api";
+import { type TextTab, useAppStore } from "./store";
+
+type View = "files" | "changes" | "history";
+
+function message(error: unknown) { return error instanceof Error ? error.message : "操作失败"; }
+
+export function App() {
+  const store = useAppStore();
+  const queryClient = useQueryClient();
+  const [view, setView] = useState<View>("files");
+  const [workspacePath, setWorkspacePath] = useState("");
+  const [notice, setNotice] = useState("");
+  const active = store.tabs.find((tab) => tab.id === store.activeId) ?? null;
+
+  useEffect(() => { api.workspace().then(store.setWorkspace).catch(() => undefined); }, []);
+  useEffect(() => {
+    const beforeUnload = (event: BeforeUnloadEvent) => { if (store.tabs.some((t) => t.type === "text" && t.dirty)) event.preventDefault(); };
+    window.addEventListener("beforeunload", beforeUnload); return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [store.tabs]);
+  useEffect(() => {
+    if (!store.workspace) return;
+    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(`${protocol}//${location.host}/api/events?workspaceId=${store.workspace.id}`);
+    ws.onmessage = async ({ data }) => {
+      const envelope = JSON.parse(data);
+      const event = envelope.event;
+      if (!event) { if (envelope.type === "workspace.resyncRequired") { queryClient.invalidateQueries(); store.markDiffsStale(); } return; }
+      if (event.type.startsWith("file.") && event.path) {
+        queryClient.invalidateQueries({ queryKey: ["tree"] });
+        const tab = store.tabs.find((t) => t.type === "text" && t.path === event.path);
+        if (tab) {
+          if (event.type === "file.deleted") store.external(event.path, null);
+          else api.file(event.path).then((file) => store.external(event.path!, file)).catch(() => undefined);
+        }
+      }
+      if (event.type.startsWith("directory.")) queryClient.invalidateQueries({ queryKey: ["tree"] });
+      if (event.type.startsWith("git.")) { queryClient.invalidateQueries({ queryKey: ["git"] }); store.markDiffsStale(); }
+    };
+    return () => ws.close();
+  }, [store.workspace?.id]);
+
+  async function openWorkspace() {
+    try { const ws = await api.openWorkspace(workspacePath.trim()); store.clear(); store.setWorkspace(ws); queryClient.clear(); setNotice(""); }
+    catch (error) { setNotice(message(error)); }
+  }
+  async function save(tab: TextTab, version = tab.diskVersion) {
+    try { const file = await api.save(tab.path, tab.bufferText, version); store.saved(tab.id, file); setNotice("已保存"); }
+    catch (error) {
+      if (error instanceof ApiClientError && error.code === "FILE_VERSION_CONFLICT") {
+        const disk = await api.file(tab.path); store.external(tab.path, disk); setNotice("磁盘内容已变化，请处理冲突");
+      } else setNotice(message(error));
+    }
+  }
+
+  if (!store.workspace) return <OpenWorkspace path={workspacePath} setPath={setWorkspacePath} open={openWorkspace} error={notice} />;
+  return <div className="app-shell">
+    <header className="topbar">
+      <div className="brand">Code Workspace</div><div className="workspace-name">{store.workspace.name}</div>
+      {store.workspace.git && <div className="branch"><GitBranch size={14}/>{store.workspace.git.branch ?? "detached"}</div>}
+      <button className="icon-button" title="刷新" onClick={() => queryClient.invalidateQueries()}><RefreshCw size={16}/></button>
+      <button className="close-workspace" onClick={async () => { if (store.tabs.some((t) => t.type === "text" && t.dirty) && !confirm("存在未保存文件，确定关闭工作区吗？")) return; await api.closeWorkspace(); store.clear(); queryClient.clear(); }}>关闭工作区</button>
+    </header>
+    <aside className="activitybar">
+      <NavButton active={view === "files"} title="文件" onClick={() => setView("files")}><Files/></NavButton>
+      <NavButton active={view === "changes"} title="Git 修改" onClick={() => setView("changes")}><GitCompare/></NavButton>
+      <NavButton active={view === "history"} title="Git 历史" onClick={() => setView("history")}><History/></NavButton>
+    </aside>
+    <aside className="sidebar">
+      {view === "files" && <Explorer
+        onOpen={async (path) => { try { const file = await api.file(path); if (file.binary) setNotice("二进制文件不能使用文本编辑器打开"); else if (file.content === null) setNotice("文件过大或编码不受支持，已阻止编辑"); else store.openFile(file); } catch (e) { setNotice(message(e)); } }}
+        onNotice={setNotice}
+      />}
+      {view === "changes" && <Changes onDiff={(scope, path) => openDiff(api.diff(scope, path), `${scope}: ${path}`)} />}
+      {view === "history" && <HistoryPanel onDiff={(hash, path) => openDiff(api.commitDiff(hash, path), `${hash.slice(0, 7)}: ${path ?? "全部修改"}`)} />}
+    </aside>
+    <main className="editor-area">
+      <div className="tabs">{store.tabs.map((tab) => <div key={tab.id} className={`tab ${tab.id === store.activeId ? "active" : ""}`} onClick={() => store.activate(tab.id)}>
+        <span>{tab.type === "text" ? tab.path.split("/").at(-1) : tab.title}</span>{tab.type === "text" && tab.dirty && <i>●</i>}{tab.type === "text" && tab.externalState !== "current" && <b>!</b>}{tab.type === "diff" && tab.stale && <b>!</b>}<button onClick={(e) => { e.stopPropagation(); store.closeTab(tab.id); }}><X size={13}/></button>
+      </div>)}</div>
+      {!active && <div className="empty"><Files size={52}/><h2>选择文件开始编辑</h2><p>外部程序的文件修改会自动同步到这里。</p></div>}
+      {active?.type === "text" && <>
+        {active.externalState !== "current" && (
+          <ConflictBar tab={active} save={save}/>
+        )}
+        <div className="editor-toolbar"><span>{active.path}</span><button disabled={!active.dirty || active.externalState !== "current"} onClick={() => save(active)}><Save size={15}/>保存</button></div>
+        {active.externalState === "changed" && active.diskText !== undefined ? <DiffEditor height="100%" theme="vs-dark" original={active.diskText} modified={active.bufferText} language={active.language} options={{ originalEditable: false, automaticLayout: true }}/>
+          : <Editor
+              height="100%"
+              theme="vs-dark"
+              path={`workspace:///${active.path}`}
+              language={active.language}
+              value={active.bufferText}
+              onChange={(value) => store.edit(active.id, value ?? "")}
+              options={{ automaticLayout: true, minimap: { enabled: false }, fontSize: 14, wordWrap: "off" }}
+              onMount={(_, monaco) => monaco.editor.addKeybindingRules([])}
+            />}
+      </>}
+      {active?.type === "diff" && <><div className={`editor-toolbar ${active.stale ? "stale" : ""}`}><span>{active.title}</span>{active.stale && <span>Git 状态已变化，请重新打开此 Diff</span>}</div><DiffEditor height="100%" theme="vs-dark" original={active.oldText} modified={active.newText} language={active.language} options={{ readOnly: true, originalEditable: false, automaticLayout: true, renderSideBySide: window.innerWidth > 800 }}/></>}
+    </main>
+    <footer className="statusbar"><span>{notice || "就绪"}</span><span>{active?.type === "text" ? `${active.dirty ? "未保存" : "已保存"} · ${active.externalState}` : ""}</span></footer>
+  </div>;
+
+  async function openDiff(promise: Promise<DiffDocument>, title: string) {
+    try {
+      const diff = await promise;
+      if (!diff.files.length) return setNotice("没有可显示的修改");
+      const file = diff.files[0];
+      if (file.status === "binary") return setNotice("该文件是二进制文件");
+      if (file.truncated) return setNotice("Diff 内容超过显示限制");
+      store.openDiff({ id: `diff:${diff.id}:${file.path}`, type: "diff", title, oldText: file.oldText ?? "", newText: file.newText ?? "", language: languageFor(file.path) });
+    } catch (error) { setNotice(message(error)); }
+  }
+}
+
+function OpenWorkspace({ path, setPath, open, error }: { path: string; setPath(v: string): void; open(): void; error: string }) {
+  return <div className="open-page"><div className="open-card"><div className="logo"><Files/></div><h1>Code Workspace</h1><p>打开一个本地目录，浏览、编辑并检查 Git 修改。</p><label>工作区绝对路径</label><input autoFocus value={path} onChange={(e) => setPath(e.target.value)} onKeyDown={(e) => e.key === "Enter" && open()} placeholder="/home/user/project"/><button className="primary" onClick={open}>打开工作区</button>{error && <div className="error">{error}</div>}<small>服务默认仅监听本机地址。不会启动终端或管理任何外部工具会话。</small></div></div>;
+}
+
+function NavButton({ active, title, onClick, children }: { active: boolean; title: string; onClick(): void; children: React.ReactNode }) { return <button className={active ? "active" : ""} title={title} onClick={onClick}>{children}</button>; }
+
+function Explorer({ onOpen, onNotice }: { onOpen(path: string): void; onNotice(text: string): void }) {
+  const queryClient = useQueryClient();
+  const [expanded, setExpanded] = useState<Set<string>>(new Set([""]));
+  async function create(kind: "file" | "directory") { const target = prompt(`输入新${kind === "file" ? "文件" : "文件夹"}的相对路径`); if (!target) return; try { kind === "file" ? await api.createFile(target) : await api.createDirectory(target); queryClient.invalidateQueries({ queryKey: ["tree"] }); } catch (e) { onNotice(message(e)); } }
+  return <><PanelTitle title="文件"><button title="新建文件" onClick={() => create("file")}><Plus size={14}/></button><button title="新建文件夹" onClick={() => create("directory")}><Folder size={14}/></button></PanelTitle><Tree path="" expanded={expanded} setExpanded={setExpanded} onOpen={onOpen} onNotice={onNotice}/></>;
+}
+
+function Tree({ path, expanded, setExpanded, onOpen, onNotice }: { path: string; expanded: Set<string>; setExpanded(v: Set<string>): void; onOpen(path: string): void; onNotice(text: string): void }) {
+  const queryClient = useQueryClient();
+  const query = useQuery({ queryKey: ["tree", path], queryFn: () => api.tree(path), enabled: expanded.has(path) });
+  if (query.isLoading) return <div className="tree-loading">加载中…</div>;
+  return <div className="tree">{query.data?.map((entry) => <div key={entry.path}>
+    <div className="tree-row" title={entry.path} onDoubleClick={async () => {
+      const next = prompt("重命名为", entry.path); if (!next || next === entry.path) return; try { await api.rename(entry.path, next); queryClient.invalidateQueries({ queryKey: ["tree"] }); } catch (e) { onNotice(message(e)); }
+    }}>
+      {entry.kind === "directory" ? <button onClick={() => { const next = new Set(expanded); next.has(entry.path) ? next.delete(entry.path) : next.add(entry.path); setExpanded(next); }}>{expanded.has(entry.path) ? <ChevronDown/> : <ChevronRight/>}</button> : <span className="indent"/>}
+      <span className="entry" onClick={() => entry.kind === "directory" ? undefined : onOpen(entry.path)}>{entry.kind === "directory" ? expanded.has(entry.path) ? <FolderOpen/> : <Folder/> : <File/>}<span>{entry.name}</span>{entry.gitState && <em className={`git-${entry.gitState}`}>{stateLetter(entry.gitState)}</em>}</span>
+      <button className="row-action" title="删除" onClick={async () => { if (!confirm(`确定删除 ${entry.path}？`)) return; try { await api.remove(entry.path, entry.kind === "directory"); queryClient.invalidateQueries({ queryKey: ["tree"] }); } catch (e) { onNotice(message(e)); } }}><Trash2/></button>
+    </div>
+    {entry.kind === "directory" && expanded.has(entry.path) && <div className="nested"><Tree path={entry.path} expanded={expanded} setExpanded={setExpanded} onOpen={onOpen} onNotice={onNotice}/></div>}
+  </div>)}</div>;
+}
+
+function Changes({ onDiff }: { onDiff(scope: "working" | "staged" | "all", path: string): void }) {
+  const query = useQuery({ queryKey: ["git", "status"], queryFn: api.gitStatus, retry: false });
+  if (query.isError) return <PanelError text={message(query.error)}/>;
+  const groups: Array<[string, "conflicted" | "staged" | "unstaged" | "untracked", "working" | "staged"]> = [["冲突", "conflicted", "working"], ["已暂存", "staged", "staged"], ["未暂存", "unstaged", "working"], ["未跟踪", "untracked", "working"]];
+  return <><PanelTitle title="Git 修改"><button title="刷新" onClick={() => query.refetch()}><RefreshCw size={14}/></button></PanelTitle><button className="wide-action" onClick={() => query.data?.files[0] && onDiff("all", query.data.files[0].path)}>查看全部修改</button>{groups.map(([title, category, scope]) => { const files = query.data?.files.filter((f) => f.categories.includes(category)) ?? []; return files.length ? <section className="change-group" key={category}><h4>{title}<span>{files.length}</span></h4>{files.map((file) => <ChangeRow key={`${category}:${file.path}`} file={file} onClick={() => onDiff(scope, file.path)}/>)}</section> : null; })}{query.data?.clean && <div className="panel-empty">工作区没有修改</div>}</>;
+}
+
+function ChangeRow({ file, onClick }: { file: GitChangedFile; onClick(): void }) { return <button className="change-row" onClick={onClick}><span>{file.path.split("/").at(-1)}</span><small>{file.path.includes("/") ? file.path.slice(0, file.path.lastIndexOf("/")) : ""}{file.additions !== undefined && ` · +${file.additions} -${file.deletions ?? 0}`}</small><em>{file.worktreeStatus !== "." ? file.worktreeStatus : file.indexStatus}</em></button>; }
+
+function HistoryPanel({ onDiff }: { onDiff(hash: string, path?: string): void }) {
+  const [commits, setCommits] = useState<GitCommitSummary[]>([]); const [cursor, setCursor] = useState<string | null | undefined>(); const [selected, setSelected] = useState<string>();
+  const page = useQuery({ queryKey: ["git", "history", cursor ?? "first"], queryFn: () => api.history(cursor ?? undefined), retry: false });
+  useEffect(() => { if (page.data) setCommits((current) => cursor ? [...current, ...page.data.items.filter((x) => !current.some((y) => y.hash === x.hash))] : page.data.items); }, [page.data]);
+  const detail = useQuery({ queryKey: ["git", "commit", selected], queryFn: () => api.commit(selected!), enabled: Boolean(selected) });
+  if (page.isError) return <PanelError text={message(page.error)}/>;
+  return <><PanelTitle title="Git 历史"/>{selected && detail.data ? <CommitDetails detail={detail.data} back={() => setSelected(undefined)} diff={onDiff}/> : <div className="history-list">{commits.map((commit) => <button key={commit.hash} onClick={() => setSelected(commit.hash)}><strong>{commit.subject}</strong><span><code>{commit.shortHash}</code>{commit.authorName}</span><time>{new Date(commit.committedAt).toLocaleString()}</time>{commit.parents.length > 1 && <em>merge</em>}</button>)}{page.data?.nextCursor && <button className="load-more" onClick={() => setCursor(page.data!.nextCursor)}>加载更多</button>}</div>}</>;
+}
+
+function CommitDetails({ detail, back, diff }: { detail: GitCommitDetail; back(): void; diff(hash: string, path?: string): void }) { return <div className="commit-detail"><button className="back" onClick={back}>← 返回历史</button><h3>{detail.subject}</h3><code>{detail.hash}</code><p>{detail.body}</p><div className="commit-meta">{detail.authorName} · {new Date(detail.committedAt).toLocaleString()} · +{detail.additions} -{detail.deletions}</div>{detail.files.map((file) => <button className="commit-file" key={`${file.status}:${file.path}`} onClick={() => diff(detail.hash, file.path)}><em>{file.status[0]}</em><span>{file.path}</span></button>)}</div>; }
+
+function ConflictBar({ tab, save }: { tab: TextTab; save(tab: TextTab, version?: string): void }) {
+  const store = useAppStore();
+  return <div className="conflict-bar"><strong>{tab.externalState === "deleted" ? "文件已从磁盘删除" : "磁盘内容已发生变化，左侧为磁盘，右侧为编辑器"}</strong>{tab.externalState === "changed" && <><button onClick={() => { if (!confirm("使用磁盘版本并放弃编辑器修改？")) return; store.saved(tab.id, { path: tab.path, content: tab.diskText ?? "", version: tab.diskNewVersion!, encoding: "utf-8", lineEnding: "LF", size: 0, readOnly: false, binary: false, finalNewline: false }); }}>使用磁盘版本</button><button onClick={() => { if (confirm("确认用编辑器内容覆盖当前磁盘版本？")) save(tab, tab.diskNewVersion); }}>保留编辑器版本</button></>}</div>;
+}
+
+function PanelTitle({ title, children }: { title: string; children?: React.ReactNode }) { return <div className="panel-title"><strong>{title}</strong><span>{children}</span></div>; }
+function PanelError({ text }: { text: string }) { return <div className="panel-empty error">{text}</div>; }
+function languageFor(path: string) { const ext = path.split(".").at(-1); return ({ ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript", json: "json", md: "markdown", css: "css", html: "html", py: "python", yml: "yaml", yaml: "yaml" } as Record<string, string>)[ext ?? ""] ?? "plaintext"; }
+function stateLetter(state: string) { return ({ modified: "M", added: "A", deleted: "D", renamed: "R", untracked: "U", conflicted: "C" } as Record<string, string>)[state] ?? ""; }
