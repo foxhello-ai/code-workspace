@@ -46,6 +46,25 @@ npm start
 
 浏览器访问 `http://127.0.0.1:4311`。
 
+### PM2 持久运行
+
+```bash
+npm run build
+npm run pm2:start
+npx pm2 save
+```
+
+常用命令：
+
+```bash
+npm run pm2:restart
+npm run pm2:stop
+npm run pm2:logs
+npx pm2 status
+```
+
+PM2 配置位于 `ecosystem.config.cjs`，服务异常退出后会自动重启，并固定监听 `0.0.0.0:4311`。
+
 ## 验证
 
 ```bash
