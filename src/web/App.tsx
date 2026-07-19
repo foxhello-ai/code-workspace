@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, File, Folder, FolderOpen, GitBranch, History, RefreshCw, Save, X, Files, GitCompare, Plus, Trash2, Pencil } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronsRight, File, Folder, FolderOpen, GitBranch, History, RefreshCw, Save, X, Files, GitCompare, Layers2, Plus, Trash2, XCircle } from "lucide-react";
 import type { DiffDocument, FileTreeEntry, GitChangedFile, GitCommitDetail, GitCommitSummary } from "../shared/contracts";
 import { api, ApiClientError } from "./api";
 import { type TextTab, useAppStore } from "./store";
@@ -44,6 +44,27 @@ export function App() {
     };
     return () => ws.close();
   }, [store.workspace?.id]);
+  useEffect(() => {
+    const handleKeydown = (event: KeyboardEvent) => {
+      const activeId = useAppStore.getState().activeId;
+      const modifier = event.ctrlKey || event.metaKey;
+      if (modifier && event.key.toLowerCase() === "w" && activeId) {
+        event.preventDefault();
+        useAppStore.getState().closeTab(activeId);
+      } else if (event.altKey && event.shiftKey && event.key.toLowerCase() === "o" && activeId) {
+        event.preventDefault();
+        useAppStore.getState().closeOtherTabs(activeId);
+      } else if (event.altKey && event.shiftKey && event.key.toLowerCase() === "r" && activeId) {
+        event.preventDefault();
+        useAppStore.getState().closeTabsToRight(activeId);
+      } else if (event.altKey && event.shiftKey && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        useAppStore.getState().closeAllTabs();
+      }
+    };
+    window.addEventListener("keydown", handleKeydown);
+    return () => window.removeEventListener("keydown", handleKeydown);
+  }, []);
 
   async function openWorkspace() {
     try { const ws = await api.openWorkspace(workspacePath.trim()); store.clear(); store.setWorkspace(ws); queryClient.clear(); setNotice(""); }
@@ -80,9 +101,16 @@ export function App() {
       {view === "history" && <HistoryPanel onDiff={(hash, path) => openDiff(api.commitDiff(hash, path), `${hash.slice(0, 7)}: ${path ?? "全部修改"}`)} />}
     </aside>
     <main className="editor-area">
-      <div className="tabs">{store.tabs.map((tab) => <div key={tab.id} className={`tab ${tab.id === store.activeId ? "active" : ""}`} onClick={() => store.activate(tab.id)}>
-        <span>{tab.type === "text" ? tab.path.split("/").at(-1) : tab.title}</span>{tab.type === "text" && tab.dirty && <i>●</i>}{tab.type === "text" && tab.externalState !== "current" && <b>!</b>}{tab.type === "diff" && tab.stale && <b>!</b>}<button onClick={(e) => { e.stopPropagation(); store.closeTab(tab.id); }}><X size={13}/></button>
-      </div>)}</div>
+      <div className="tab-strip">
+        <div className="tabs">{store.tabs.map((tab) => <div key={tab.id} className={`tab ${tab.id === store.activeId ? "active" : ""}`} onClick={() => store.activate(tab.id)}>
+          <span>{tab.type === "text" ? tab.path.split("/").at(-1) : tab.title}</span>{tab.type === "text" && tab.dirty && <i>●</i>}{tab.type === "text" && tab.externalState !== "current" && <b>!</b>}{tab.type === "diff" && tab.stale && <b>!</b>}<button title="关闭当前 (Ctrl/Cmd+W)" onClick={(e) => { e.stopPropagation(); store.closeTab(tab.id); }}><X size={13}/></button>
+        </div>)}</div>
+        <div className="tab-actions">
+          <button disabled={!store.activeId || store.tabs.length < 2} title="关闭其他 (Alt+Shift+O)" onClick={() => store.activeId && store.closeOtherTabs(store.activeId)}><Layers2/></button>
+          <button disabled={!store.activeId || store.tabs.findIndex((tab) => tab.id === store.activeId) === store.tabs.length - 1} title="关闭右侧 (Alt+Shift+R)" onClick={() => store.activeId && store.closeTabsToRight(store.activeId)}><ChevronsRight/></button>
+          <button disabled={!store.tabs.length} title="关闭全部 (Alt+Shift+A)" onClick={() => store.closeAllTabs()}><XCircle/></button>
+        </div>
+      </div>
       {!active && <div className="empty"><Files size={52}/><h2>选择文件开始编辑</h2><p>外部程序的文件修改会自动同步到这里。</p></div>}
       {active?.type === "text" && <>
         {active.externalState !== "current" && (

@@ -26,6 +26,9 @@ interface AppState {
   openFile(file: FileContent): void;
   openDiff(tab: Omit<DiffTab, "id" | "stale"> & { id?: string }): void;
   closeTab(id: string): boolean;
+  closeOtherTabs(id: string): boolean;
+  closeTabsToRight(id: string): boolean;
+  closeAllTabs(): boolean;
   activate(id: string): void;
   edit(id: string, text: string): void;
   saved(id: string, file: FileContent): void;
@@ -55,6 +58,28 @@ export const useAppStore = create<AppState>((set, get) => ({
     const tab = get().tabs.find((item) => item.id === id);
     if (tab?.type === "text" && tab.dirty && !window.confirm(`“${tab.path}”尚未保存，确定关闭吗？`)) return false;
     set((state) => { const tabs = state.tabs.filter((item) => item.id !== id); return { tabs, activeId: state.activeId === id ? tabs.at(-1)?.id ?? null : state.activeId }; });
+    return true;
+  },
+  closeOtherTabs: (id) => {
+    const closing = get().tabs.filter((tab) => tab.id !== id);
+    const dirty = closing.filter((tab) => tab.type === "text" && tab.dirty);
+    if (dirty.length && !window.confirm(`其他标签中有 ${dirty.length} 个文件尚未保存，确定关闭吗？`)) return false;
+    set((state) => ({ tabs: state.tabs.filter((tab) => tab.id === id), activeId: id }));
+    return true;
+  },
+  closeTabsToRight: (id) => {
+    const index = get().tabs.findIndex((tab) => tab.id === id);
+    if (index < 0 || index === get().tabs.length - 1) return true;
+    const closing = get().tabs.slice(index + 1);
+    const dirty = closing.filter((tab) => tab.type === "text" && tab.dirty);
+    if (dirty.length && !window.confirm(`右侧标签中有 ${dirty.length} 个文件尚未保存，确定关闭吗？`)) return false;
+    set((state) => ({ tabs: state.tabs.slice(0, index + 1), activeId: id }));
+    return true;
+  },
+  closeAllTabs: () => {
+    const dirty = get().tabs.filter((tab) => tab.type === "text" && tab.dirty);
+    if (dirty.length && !window.confirm(`有 ${dirty.length} 个文件尚未保存，确定关闭全部标签吗？`)) return false;
+    set({ tabs: [], activeId: null });
     return true;
   },
   activate: (activeId) => set({ activeId }),
