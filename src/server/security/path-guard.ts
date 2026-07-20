@@ -22,23 +22,24 @@ export class PathGuard {
     throw new AppError(403, "PATH_OUTSIDE_WORKSPACE", "禁止访问工作区之外的路径");
   }
 
-  async resolveExisting(relative = "") {
+  resolveLogical(relative = "") {
     const normalized = this.validateRelative(relative);
-    const candidate = path.resolve(this.root, normalized);
-    this.ensureInside(candidate);
+    const absolute = path.resolve(this.root, normalized);
+    this.ensureInside(absolute);
+    return { absolute, relative: normalized };
+  }
+
+  async resolveExisting(relative = "") {
+    const { absolute: candidate, relative: normalized } = this.resolveLogical(relative);
     let actual: string;
     try { actual = await realpath(candidate); } catch { throw new AppError(404, "PATH_NOT_FOUND", "文件或目录不存在"); }
-    this.ensureInside(actual);
     return { absolute: actual, relative: normalized };
   }
 
   async resolveNew(relative: string) {
-    const normalized = this.validateRelative(relative);
+    const { absolute: candidate, relative: normalized } = this.resolveLogical(relative);
     if (!normalized) throw new AppError(400, "INVALID_PATH", "不能操作工作区根目录");
-    const candidate = path.resolve(this.root, normalized);
-    this.ensureInside(candidate);
-    const parent = await realpath(path.dirname(candidate)).catch(() => { throw new AppError(404, "PATH_NOT_FOUND", "父目录不存在"); });
-    this.ensureInside(parent);
+    await realpath(path.dirname(candidate)).catch(() => { throw new AppError(404, "PATH_NOT_FOUND", "父目录不存在"); });
     return { absolute: candidate, relative: normalized };
   }
 

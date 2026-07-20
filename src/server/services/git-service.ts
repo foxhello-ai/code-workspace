@@ -10,22 +10,24 @@ const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const validHash = /^[0-9a-f]{4,64}$/i;
 
 export class GitService {
-  private revision = 0;
-  private snapshot: GitStatusSnapshot | null = null;
+  private revisions = new Map<string, number>();
+  private snapshots = new Map<string, GitStatusSnapshot>();
   constructor(private workspace: WorkspaceService) {}
 
-  private context() {
-    const context = this.workspace.get();
-    if (!context.gitRunner || !context.info.git) throw new AppError(503, "GIT_UNAVAILABLE", "当前工作区不是 Git 仓库");
-    return { context, runner: context.gitRunner };
+  private context(repositoryId?: string) {
+    return this.workspace.getRepository(repositoryId);
   }
 
-  invalidate() { this.snapshot = null; }
-  getRevision() { return this.revision; }
+  invalidate(repositoryId?: string) { repositoryId ? this.snapshots.delete(repositoryId) : this.snapshots.clear(); }
+  getRevision(repositoryId?: string) {
+    const repository = repositoryId ? this.workspace.get().info.repositories.find((item) => item.id === repositoryId) : this.workspace.get().info.git;
+    return repository ? this.revisions.get(repository.id) ?? 0 : 0;
+  }
 
-  async status(force = false): Promise<GitStatusSnapshot> {
-    if (this.snapshot && !force) return this.snapshot;
-    const { runner } = this.context();
+  async status(force = false, repositoryId?: string): Promise<GitStatusSnapshot> {
+    const { repository, runner } = this.context(repositoryId);
+    const cached = this.snapshots.get(repository.id);
+    if (cached && !force) return cached;
     const raw = await runner.run(["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all"]);
     const records = raw.toString("utf8").split("\0").filter(Boolean);
     const files: GitChangedFile[] = [];
@@ -68,22 +70,24 @@ export class GitService {
     };
     await applyStats(["diff", "--numstat"], "unstaged");
     await applyStats(["diff", "--cached", "--numstat"], "staged");
-    this.revision++;
+    const revision = (this.revisions.get(repository.id) ?? 0) + 1;
+    this.revisions.set(repository.id, revision);
     const counts = { conflicted: 0, staged: 0, unstaged: 0, untracked: 0 };
     for (const file of files) for (const category of file.categories) counts[category]++;
-    this.snapshot = { revision: this.revision, branch, head, detached: !branch && Boolean(head), clean: files.length === 0, files, counts };
-    return this.snapshot;
+    const snapshot = { repositoryId: repository.id, revision, branch, head, detached: !branch && Boolean(head), clean: files.length === 0, files, counts };
+    this.snapshots.set(repository.id, snapshot);
+    return snapshot;
   }
 
-  async ignored(paths: string[]) {
+  async ignored(paths: string[], repositoryId?: string) {
     if (!paths.length) return new Set<string>();
-    const { runner } = this.context();
+    const { runner } = this.context(repositoryId);
     const output = await runner.text(["check-ignore", "--no-index", "-z", "--", ...paths], { allowFailure: true });
     return new Set(output.split("\0").filter(Boolean));
   }
 
-  async branches() {
-    const { runner } = this.context();
+  async branches(repositoryId?: string) {
+    const { runner } = this.context(repositoryId);
     const format = "%(refname)%00%(refname:short)%00%(objectname)%00%(HEAD)%00%(upstream:short)%00";
     const raw = await runner.text(["for-each-ref", `--format=${format}`, "refs/heads", "refs/remotes"]);
     const fields = raw.split("\0");
@@ -98,12 +102,12 @@ export class GitService {
     return items.sort((a, b) => Number(b.current) - Number(a.current) || a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name));
   }
 
-  async switchBranch(name: string, kind: "local" | "remote", allowDirty = false) {
-    const { runner } = this.context();
-    const branches = await this.branches();
+  async switchBranch(name: string, kind: "local" | "remote", allowDirty = false, repositoryId?: string) {
+    const { repository, runner } = this.context(repositoryId);
+    const branches = await this.branches(repository.id);
     const target = branches.find((branch) => branch.name === name && branch.kind === kind);
     if (!target) throw new AppError(404, "BRANCH_NOT_FOUND", "分支不存在或已发生变化");
-    const before = await this.status(true);
+    const before = await this.status(true, repository.id);
     if (!before.clean && !allowDirty) throw new AppError(409, "GIT_WORKTREE_DIRTY", "工作区存在未提交修改，确认保留修改后才能切换", { files: before.files.length });
     if (target.current) return { workspace: this.workspace.get().info, status: before };
     if (kind === "local") await runner.run(["switch", "--", target.name], { write: true, timeoutMs: 30_000 });
@@ -113,14 +117,14 @@ export class GitService {
       if (localExists) await runner.run(["switch", "--", localName], { write: true, timeoutMs: 30_000 });
       else await runner.run(["switch", "--track", target.name], { write: true, timeoutMs: 30_000 });
     }
-    this.invalidate();
+    this.invalidate(repository.id);
     const workspace = await this.workspace.refreshGitInfo();
-    const status = await this.status(true);
+    const status = await this.status(true, repository.id);
     return { workspace, status };
   }
 
-  async graph(cursor = 0, limit = 100) {
-    const { runner } = this.context();
+  async graph(cursor = 0, limit = 100, repositoryId?: string) {
+    const { repository, runner } = this.context(repositoryId);
     const skip = Math.max(0, cursor);
     const bounded = Math.max(1, Math.min(limit, 200));
     const format = "%H%x1f%h%x1f%P%x1f%s%x1f%an%x1f%ae%x1f%aI%x1f%cI%x1f%D%x1e";
@@ -135,11 +139,11 @@ export class GitService {
       });
       return { hash, shortHash, parents: parents ? parents.split(" ") : [], subject, authorName, authorEmail, authoredAt, committedAt, decorations };
     });
-    return { items, nextCursor: items.length === bounded ? skip + bounded : null, head: (await this.status()).head };
+    return { items, nextCursor: items.length === bounded ? skip + bounded : null, head: (await this.status(false, repository.id)).head };
   }
 
-  async fileState(relative: string): Promise<GitState> {
-    const snapshot = await this.status();
+  async fileState(relative: string, repositoryId?: string): Promise<GitState> {
+    const snapshot = await this.status(false, repositoryId);
     const matches = snapshot.files.filter((file) => file.path === relative || file.oldPath === relative);
     if (!matches.length) return null;
     const file = matches[0];
@@ -149,8 +153,8 @@ export class GitService {
     return code === "A" ? "added" : code === "D" ? "deleted" : code === "R" ? "renamed" : "modified";
   }
 
-  async history(cursor?: string, limit = 50) {
-    const { runner } = this.context();
+  async history(cursor?: string, limit = 50, repositoryId?: string) {
+    const { repository, runner } = this.context(repositoryId);
     const bounded = Math.max(1, Math.min(limit, 100));
     if (cursor && !validHash.test(cursor)) throw new AppError(400, "INVALID_REVISION", "提交标识无效");
     const format = "%H%x1f%h%x1f%P%x1f%s%x1f%an%x1f%ae%x1f%aI%x1f%cI%x1e";
@@ -161,12 +165,12 @@ export class GitService {
       const [hash, shortHash, parents, subject, authorName, authorEmail, authoredAt, committedAt] = record.split("\x1f");
       return { hash, shortHash, parents: parents ? parents.split(" ") : [], subject, authorName, authorEmail, authoredAt, committedAt };
     });
-    return { items: commits, nextCursor: commits.length === bounded ? commits.at(-1)!.hash : null, head: (await this.status()).head };
+    return { items: commits, nextCursor: commits.length === bounded ? commits.at(-1)!.hash : null, head: (await this.status(false, repository.id)).head };
   }
 
-  async commit(hash: string): Promise<GitCommitDetail> {
+  async commit(hash: string, repositoryId?: string): Promise<GitCommitDetail> {
     if (!validHash.test(hash)) throw new AppError(400, "INVALID_REVISION", "提交标识无效");
-    const { runner } = this.context();
+    const { runner } = this.context(repositoryId);
     const format = "%H%x1f%h%x1f%P%x1f%s%x1f%b%x1f%an%x1f%ae%x1f%aI%x1f%cn%x1f%ce%x1f%cI";
     const meta = (await runner.text(["show", "-s", `--format=${format}`, hash])).trim().split("\x1f");
     const nameStatus = (await runner.run(["diff-tree", "--root", "--no-commit-id", "-r", "-M", "--name-status", "-z", hash])).toString("utf8").split("\0").filter(Boolean);
@@ -194,14 +198,13 @@ export class GitService {
     return { binary: false, text: buffer.toString("utf8") };
   }
 
-  async image(source: "worktree" | "index" | "head" | "commit", filePath: string, hash?: string) {
+  async image(source: "worktree" | "index" | "head" | "commit", filePath: string, hash?: string, repositoryId?: string) {
     const normalized = filePath.replaceAll("\\", "/");
     if (!normalized || path.isAbsolute(normalized) || normalized.split("/").some((part) => part === "..") || normalized === ".git" || normalized.startsWith(".git/")) throw new AppError(400, "INVALID_PATH", "图片路径无效");
-    const { context, runner } = this.context();
+    const { repository, runner } = this.context(repositoryId);
     let buffer: Buffer;
     if (source === "worktree") {
-      const target = await context.guard.resolveExisting(normalized);
-      buffer = await readFile(target.absolute);
+      buffer = await readFile(path.join(repository.repositoryRoot, normalized));
     } else {
       if (source === "commit" && (!hash || !validHash.test(hash))) throw new AppError(400, "INVALID_REVISION", "提交标识无效");
       const spec = source === "index" ? `:${normalized}` : source === "head" ? `HEAD:${normalized}` : `${hash}:${normalized}`;
@@ -212,8 +215,8 @@ export class GitService {
     return buffer;
   }
 
-  async diff(scope: DiffScope, selectedPath?: string, hash?: string): Promise<DiffDocument> {
-    const { context, runner } = this.context();
+  async diff(scope: DiffScope, selectedPath?: string, hash?: string, repositoryId?: string): Promise<DiffDocument> {
+    const { repository, runner } = this.context(repositoryId);
     let args: string[];
     let base: string;
     let target: string;
@@ -223,7 +226,7 @@ export class GitService {
     else if (scope === "all") { args = ["diff", "HEAD", "--name-status", "-z", "-M"]; base = "HEAD"; target = "WORKTREE"; }
     else {
       if (!hash || !validHash.test(hash)) throw new AppError(400, "INVALID_REVISION", "提交标识无效");
-      const detail = await this.commit(hash);
+      const detail = await this.commit(hash, repository.id);
       parent = detail.parents[0] ?? EMPTY_TREE;
       args = ["diff", parent, hash, "--name-status", "-z", "-M"];
       base = parent; target = hash;
@@ -232,7 +235,7 @@ export class GitService {
     const records = (await runner.run(args, { allowFailure: scope !== "commit" })).toString("utf8").split("\0").filter(Boolean);
     const changes = this.parseNameStatus(records);
     if (scope === "working" || scope === "all") {
-      const untracked = (await this.status()).files.filter((f) => f.categories.includes("untracked") && (!selectedPath || f.path === selectedPath));
+      const untracked = (await this.status(false, repository.id)).files.filter((f) => f.categories.includes("untracked") && (!selectedPath || f.path === selectedPath));
       for (const file of untracked) if (!changes.some((c) => c.path === file.path)) changes.push({ code: "A", status: "added", path: file.path });
     }
     const files: DiffFile[] = [];
@@ -250,7 +253,7 @@ export class GitService {
         if (scope === "staged") newSide = await this.readGit(runner, `:${change.path}`);
         else if (scope === "commit") newSide = await this.readGit(runner, `${hash}:${change.path}`);
         else {
-          const absolute = path.join(context.info.rootPath, change.path);
+          const absolute = path.join(repository.repositoryRoot, change.path);
           const buffer = await readFile(absolute).catch(() => Buffer.alloc(0));
           newSide = buffer.includes(0) ? { binary: true, text: undefined } : { binary: false, text: buffer.toString("utf8") };
         }
@@ -261,6 +264,7 @@ export class GitService {
       truncated ||= tooLarge;
       files.push({ path: change.path, oldPath: change.oldPath, status: change.status, binary, oldText: binary || tooLarge ? undefined : oldSide.text, newText: binary || tooLarge ? undefined : newSide.text, truncated: tooLarge });
     }
-    return { id: createHash("sha1").update(`${scope}:${hash ?? ""}:${selectedPath ?? ""}:${this.revision}`).digest("hex"), scope, base, target, generatedAt: new Date().toISOString(), gitRevision: this.revision, truncated, files };
+    const revision = this.revisions.get(repository.id) ?? 0;
+    return { id: createHash("sha1").update(`${repository.id}:${scope}:${hash ?? ""}:${selectedPath ?? ""}:${revision}`).digest("hex"), scope, base, target, generatedAt: new Date().toISOString(), gitRevision: revision, truncated, files };
   }
 }

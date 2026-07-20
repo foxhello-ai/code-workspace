@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { buildApp } from "./app.js";
+import { config } from "./config.js";
 
 let root: string;
 let app: Awaited<ReturnType<typeof buildApp>>;
@@ -37,6 +38,66 @@ describe("workspace API", () => {
     const saved = await app.inject({ method: "PUT", url: "/api/files/content", payload: { path: "hello.txt", content: "two\n", expectedVersion: file.version } });
     expect(saved.statusCode).toBe(200);
     expect(await readFile(path.join(root, "hello.txt"), "utf8")).toBe("two\n");
+  });
+
+  it("shows symlink targets as files or expandable directories", async () => {
+    const outside = await mkdtemp(path.join(os.tmpdir(), "code-workspace-linked-"));
+    try {
+      await mkdir(path.join(outside, "nested"));
+      await writeFile(path.join(outside, "nested", "child.txt"), "linked child\n");
+      await writeFile(path.join(outside, "linked.md"), "linked file\n");
+      await symlink(path.join(outside, "nested"), path.join(root, "linked-dir"));
+      await symlink(path.join(outside, "linked.md"), path.join(root, "linked-file.md"));
+
+      const rootTree = await app.inject({ method: "GET", url: "/api/files/tree" });
+      expect(rootTree.statusCode).toBe(200);
+      const entries = rootTree.json().data as Array<{ name: string; kind: string; expandable: boolean }>;
+      expect(entries.find((entry) => entry.name === "linked-dir")).toMatchObject({ kind: "directory", expandable: true });
+      expect(entries.find((entry) => entry.name === "linked-file.md")).toMatchObject({ kind: "file", expandable: false });
+
+      const linkedTree = await app.inject({ method: "GET", url: "/api/files/tree?path=linked-dir" });
+      expect(linkedTree.statusCode).toBe(200);
+      expect(linkedTree.json().data.some((entry: { name: string }) => entry.name === "child.txt")).toBe(true);
+
+      const linkedFile = await app.inject({ method: "GET", url: "/api/files/content?path=linked-file.md" });
+      expect(linkedFile.statusCode).toBe(200);
+      expect(linkedFile.json().data.content).toBe("linked file\n");
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("discovers symlink Git repositories by configured depth", async () => {
+    const aggregate = await mkdtemp(path.join(os.tmpdir(), "code-workspace-aggregate-"));
+    const repoA = await mkdtemp(path.join(os.tmpdir(), "code-workspace-repo-a-"));
+    const repoB = await mkdtemp(path.join(os.tmpdir(), "code-workspace-repo-b-"));
+    const originalDepth = config.gitDiscoveryDepth;
+    try {
+      for (const repo of [repoA, repoB]) {
+        execFileSync("git", ["init", "-q"], { cwd: repo });
+        execFileSync("git", ["config", "user.name", "Tester"], { cwd: repo });
+        execFileSync("git", ["config", "user.email", "tester@example.com"], { cwd: repo });
+        await writeFile(path.join(repo, "file.txt"), "one\n");
+        execFileSync("git", ["add", "file.txt"], { cwd: repo });
+        execFileSync("git", ["commit", "-qm", "initial"], { cwd: repo });
+      }
+      await mkdir(path.join(aggregate, "services"));
+      await symlink(repoA, path.join(aggregate, "repo-a"));
+      await symlink(repoB, path.join(aggregate, "services", "repo-b"));
+
+      config.gitDiscoveryDepth = 1;
+      const depthOne = await app.inject({ method: "POST", url: "/api/workspace/open", payload: { path: aggregate } });
+      expect(depthOne.statusCode).toBe(200);
+      expect(depthOne.json().data.repositories.map((repo: { workspacePath: string }) => repo.workspacePath)).toEqual(["repo-a"]);
+
+      config.gitDiscoveryDepth = 2;
+      const depthTwo = await app.inject({ method: "POST", url: "/api/workspace/open", payload: { path: aggregate } });
+      expect(depthTwo.statusCode).toBe(200);
+      expect(depthTwo.json().data.repositories.map((repo: { workspacePath: string }) => repo.workspacePath)).toEqual(["repo-a", "services/repo-b"]);
+    } finally {
+      config.gitDiscoveryDepth = originalDepth;
+      await Promise.all([aggregate, repoA, repoB].map((item) => rm(item, { recursive: true, force: true })));
+    }
   });
 
   it("rejects saving over an external change", async () => {

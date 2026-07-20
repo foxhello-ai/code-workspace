@@ -17,13 +17,14 @@ export class WatchService {
     const root = context.info.rootPath;
     this.watcher = chokidar.watch(root, {
       ignoreInitial: true,
+      followSymlinks: false,
       awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 25 },
       ignored: (candidate) => {
         const rel = path.relative(root, candidate).replaceAll("\\", "/");
         if (!rel) return false;
         if (rel === ".git") return false;
         if (rel.startsWith(".git/")) return !(/^\.git\/(HEAD|index|refs\/)/.test(rel));
-        return /(^|\/)(node_modules|dist|build|coverage)(\/|$)/.test(rel) || /(~|\.swp|\.tmp)$/.test(rel);
+        return /(^|\/)(\.git|node_modules|target|dist|build|coverage|\.gradle|\.idea|\.cursor)(\/|$)/.test(rel) || /(~|\.swp|\.tmp)$/.test(rel);
       }
     });
     const send = (type: string, absolute: string) => {
@@ -42,6 +43,10 @@ export class WatchService {
     this.watcher.on("unlink", (p) => send("file.deleted", p));
     this.watcher.on("addDir", (p) => send("directory.created", p));
     this.watcher.on("unlinkDir", (p) => send("directory.deleted", p));
+    this.watcher.on("error", () => {
+      this.git.invalidate();
+      this.hub.emit(context.info.id, { type: "watcher.error" });
+    });
   }
 
   private scheduleGit() {

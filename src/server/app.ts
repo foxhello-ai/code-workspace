@@ -50,22 +50,46 @@ export async function buildApp(options: { disableAuth?: boolean } = {}) {
   app.get("/api/workspace", async (request) => ({ data: workspace.get().info, requestId: request.id }));
   app.post("/api/workspace/close", async (request) => { await workspace.close(); return { data: null, requestId: request.id }; });
 
+  const gitState = (file: { indexStatus: string; worktreeStatus: string; categories: string[] }) => {
+    if (file.categories.includes("conflicted")) return "conflicted";
+    if (file.categories.includes("untracked")) return "untracked";
+    const code = file.worktreeStatus !== "." ? file.worktreeStatus : file.indexStatus;
+    return code === "A" ? "added" : code === "D" ? "deleted" : code === "R" ? "renamed" : "modified";
+  };
+  const insideOrSame = (parent: string, child: string) => parent === "" || child === parent || child.startsWith(`${parent}/`);
+  const relativeToRepo = (workspacePath: string, repoPath: string) => repoPath ? workspacePath === repoPath ? "" : workspacePath.startsWith(`${repoPath}/`) ? workspacePath.slice(repoPath.length + 1) : null : workspacePath;
+
   app.get<{ Querystring: { path?: string; showHidden?: string; showIgnored?: string } }>("/api/files/tree", async (request) => {
     let data = await files.tree(request.query.path ?? "", request.query.showHidden !== "false");
-    if (workspace.get().info.git) {
+    const repositories = workspace.get().info.repositories;
+    if (repositories.length) {
+      const snapshots = await Promise.all(repositories.map(async (repository) => ({ repository, snapshot: await git.status(false, repository.id).catch(() => null) })));
       if (request.query.showIgnored !== "true") {
-        const ignored = await git.ignored(data.map((entry) => entry.path));
+        const ignored = new Set<string>();
+        for (const { repository } of snapshots) {
+          const paths = data.map((entry) => ({ entry, repoPath: relativeToRepo(entry.path, repository.workspacePath) })).filter((item): item is { entry: typeof data[number]; repoPath: string } => item.repoPath !== null && item.repoPath !== "");
+          const repoIgnored = await git.ignored(paths.map((item) => item.repoPath), repository.id).catch(() => new Set<string>());
+          for (const item of paths) if (repoIgnored.has(item.repoPath)) ignored.add(item.entry.path);
+        }
         data = data.filter((entry) => !ignored.has(entry.path));
       }
-      const snapshot = await git.status();
       for (const entry of data) {
-        const affected = snapshot.files.filter((file) => file.path === entry.path || file.oldPath === entry.path || (entry.kind === "directory" && (file.path.startsWith(`${entry.path}/`) || file.oldPath?.startsWith(`${entry.path}/`))));
-        entry.descendantChanged = entry.kind === "directory" && affected.length > 0;
-        const file = affected.find((item) => item.path === entry.path || item.oldPath === entry.path);
-        if (!file) continue;
-        if (file.categories.includes("conflicted")) entry.gitState = "conflicted";
-        else if (file.categories.includes("untracked")) entry.gitState = "untracked";
-        else { const code = file.worktreeStatus !== "." ? file.worktreeStatus : file.indexStatus; entry.gitState = code === "A" ? "added" : code === "D" ? "deleted" : code === "R" ? "renamed" : "modified"; }
+        for (const { repository, snapshot } of snapshots) {
+          if (!snapshot) continue;
+          if (entry.path === repository.workspacePath) {
+            entry.descendantChanged = entry.kind === "directory" && snapshot.files.length > 0;
+            continue;
+          }
+          const repoPath = relativeToRepo(entry.path, repository.workspacePath);
+          if (repoPath !== null) {
+            const affected = snapshot.files.filter((file) => file.path === repoPath || file.oldPath === repoPath || (entry.kind === "directory" && repoPath && (file.path.startsWith(`${repoPath}/`) || file.oldPath?.startsWith(`${repoPath}/`))));
+            entry.descendantChanged ||= entry.kind === "directory" && affected.length > 0;
+            const file = affected.find((item) => item.path === repoPath || item.oldPath === repoPath);
+            if (file) entry.gitState = gitState(file);
+          } else if (entry.kind === "directory" && insideOrSame(entry.path, repository.workspacePath) && snapshot.files.length) {
+            entry.descendantChanged = true;
+          }
+        }
       }
     }
     return { data, requestId: request.id };
@@ -82,12 +106,12 @@ export async function buildApp(options: { disableAuth?: boolean } = {}) {
     if (!mime) throw new AppError(415, "UNSUPPORTED_PREVIEW", "该文件类型不支持图片预览");
     return reply.header("content-type", mime).header("cache-control", "no-store").header("x-content-type-options", "nosniff").send(createReadStream(target.absolute));
   });
-  app.get<{ Querystring: { source: "worktree" | "index" | "head" | "commit"; path: string; hash?: string } }>("/api/git/image", async (request, reply) => {
+  app.get<{ Querystring: { source: "worktree" | "index" | "head" | "commit"; path: string; hash?: string; repositoryId?: string } }>("/api/git/image", async (request, reply) => {
     const extension = path.extname(request.query.path).toLowerCase();
     const mimeTypes: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp", ".ico": "image/x-icon" };
     const mime = mimeTypes[extension];
     if (!mime) throw new AppError(415, "UNSUPPORTED_PREVIEW", "该文件类型不支持图片预览");
-    const buffer = await git.image(request.query.source, request.query.path, request.query.hash);
+    const buffer = await git.image(request.query.source, request.query.path, request.query.hash, request.query.repositoryId);
     return reply.header("content-type", mime).header("cache-control", "no-store").header("x-content-type-options", "nosniff").send(buffer);
   });
   app.put<{ Body: { path: string; content: string; expectedVersion: string } }>("/api/files/content", async (request) => ({ data: await files.save(request.body.path, request.body.content, request.body.expectedVersion), requestId: request.id }));
@@ -97,15 +121,17 @@ export async function buildApp(options: { disableAuth?: boolean } = {}) {
   app.delete<{ Querystring: { path: string; recursive?: string; confirmed?: string } }>("/api/files", async (request) => { await files.remove(request.query.path, request.query.recursive === "true", request.query.confirmed === "true"); return { data: null, requestId: request.id }; });
   app.get<{ Querystring: { path: string } }>("/api/files/absolute-path", async (request) => ({ data: (await workspace.get().guard.resolveExisting(request.query.path)).absolute, requestId: request.id }));
 
-  app.get("/api/git/repository", async (request) => ({ data: workspace.get().info.git, requestId: request.id }));
-  app.get("/api/git/status", async (request) => ({ data: await git.status(), requestId: request.id }));
-  app.get("/api/git/branches", async (request) => ({ data: await git.branches(), requestId: request.id }));
-  app.post<{ Body: { name: string; kind: "local" | "remote"; allowDirty?: boolean } }>("/api/git/switch", async (request) => ({ data: await git.switchBranch(request.body.name, request.body.kind, Boolean(request.body.allowDirty)), requestId: request.id }));
-  app.get<{ Querystring: { cursor?: string; limit?: string } }>("/api/git/history", async (request) => ({ data: await git.history(request.query.cursor, Number(request.query.limit ?? 50)), requestId: request.id }));
-  app.get<{ Querystring: { cursor?: string; limit?: string } }>("/api/git/graph", async (request) => ({ data: await git.graph(Number(request.query.cursor ?? 0), Number(request.query.limit ?? 100)), requestId: request.id }));
-  app.get<{ Params: { hash: string } }>("/api/git/commits/:hash", async (request) => ({ data: await git.commit(request.params.hash), requestId: request.id }));
-  app.get<{ Querystring: { scope?: "working" | "staged" | "all"; path?: string } }>("/api/git/diff", async (request) => ({ data: await git.diff(request.query.scope ?? "all", request.query.path), requestId: request.id }));
-  app.get<{ Params: { hash: string }; Querystring: { path?: string } }>("/api/git/diff/commits/:hash", async (request) => ({ data: await git.diff("commit", request.query.path, request.params.hash), requestId: request.id }));
+  app.get<{ Querystring: { repositoryId?: string } }>("/api/git/repository", async (request) => ({ data: request.query.repositoryId ? workspace.getRepository(request.query.repositoryId).repository : workspace.get().info.git, requestId: request.id }));
+  app.get("/api/git/repositories", async (request) => ({ data: workspace.repositories(), requestId: request.id }));
+  app.post<{ Body: { repositoryId: string } }>("/api/git/repository/select", async (request) => { git.invalidate(); return { data: await workspace.selectRepository(request.body.repositoryId), requestId: request.id }; });
+  app.get<{ Querystring: { repositoryId?: string } }>("/api/git/status", async (request) => ({ data: await git.status(false, request.query.repositoryId), requestId: request.id }));
+  app.get<{ Querystring: { repositoryId?: string } }>("/api/git/branches", async (request) => ({ data: await git.branches(request.query.repositoryId), requestId: request.id }));
+  app.post<{ Body: { name: string; kind: "local" | "remote"; allowDirty?: boolean; repositoryId?: string } }>("/api/git/switch", async (request) => ({ data: await git.switchBranch(request.body.name, request.body.kind, Boolean(request.body.allowDirty), request.body.repositoryId), requestId: request.id }));
+  app.get<{ Querystring: { cursor?: string; limit?: string; repositoryId?: string } }>("/api/git/history", async (request) => ({ data: await git.history(request.query.cursor, Number(request.query.limit ?? 50), request.query.repositoryId), requestId: request.id }));
+  app.get<{ Querystring: { cursor?: string; limit?: string; repositoryId?: string } }>("/api/git/graph", async (request) => ({ data: await git.graph(Number(request.query.cursor ?? 0), Number(request.query.limit ?? 100), request.query.repositoryId), requestId: request.id }));
+  app.get<{ Params: { hash: string }; Querystring: { repositoryId?: string } }>("/api/git/commits/:hash", async (request) => ({ data: await git.commit(request.params.hash, request.query.repositoryId), requestId: request.id }));
+  app.get<{ Querystring: { scope?: "working" | "staged" | "all"; path?: string; repositoryId?: string } }>("/api/git/diff", async (request) => ({ data: await git.diff(request.query.scope ?? "all", request.query.path, undefined, request.query.repositoryId), requestId: request.id }));
+  app.get<{ Params: { hash: string }; Querystring: { path?: string; repositoryId?: string } }>("/api/git/diff/commits/:hash", async (request) => ({ data: await git.diff("commit", request.query.path, request.params.hash, request.query.repositoryId), requestId: request.id }));
 
   app.get<{ Querystring: { workspaceId: string; lastSequence?: string } }>("/api/events", { websocket: true }, (socket, request) => {
     const current = workspace.get().info;

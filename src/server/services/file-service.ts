@@ -23,11 +23,13 @@ export class FileService {
       const rel = relative ? `${relative}/${entry.name}` : entry.name;
       const full = path.join(absolute, entry.name);
       const s = await lstat(full).catch(() => null);
+      const target = entry.isSymbolicLink() ? await stat(full).catch(() => null) : null;
+      const kind = target?.isDirectory() || entry.isDirectory() ? "directory" : "file";
       result.push({
         name: entry.name, path: rel.replaceAll("\\", "/"),
-        kind: entry.isSymbolicLink() ? "symlink" : entry.isDirectory() ? "directory" : "file",
+        kind,
         size: s?.size, modifiedAt: s?.mtime.toISOString(), hidden: entry.name.startsWith("."),
-        expandable: entry.isDirectory(), gitState: this.gitState(rel.replaceAll("\\", "/"))
+        expandable: kind === "directory", gitState: this.gitState(rel.replaceAll("\\", "/"))
       });
     }
     return result.sort((a, b) => a.kind === b.kind ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }) : a.kind === "directory" ? -1 : 1);
@@ -95,7 +97,8 @@ export class FileService {
   }
 
   async move(from: string, to: string) {
-    const source = await this.workspace.get().guard.resolveExisting(from);
+    await this.workspace.get().guard.resolveExisting(from);
+    const source = this.workspace.get().guard.resolveLogical(from);
     const target = await this.workspace.get().guard.resolveNew(to);
     if (await stat(target.absolute).then(() => true).catch(() => false)) throw new AppError(409, "PATH_EXISTS", "目标已经存在");
     await rename(source.absolute, target.absolute);
@@ -103,7 +106,8 @@ export class FileService {
 
   async remove(relative: string, recursive: boolean, confirmed: boolean) {
     if (!confirmed) throw new AppError(400, "CONFIRMATION_REQUIRED", "删除操作需要确认");
-    const target = await this.workspace.get().guard.resolveExisting(relative);
+    await this.workspace.get().guard.resolveExisting(relative);
+    const target = this.workspace.get().guard.resolveLogical(relative);
     await rm(target.absolute, { recursive, force: false });
   }
 }

@@ -2,12 +2,26 @@ export type GitState = "modified" | "added" | "deleted" | "renamed" | "untracked
 export type ChangeCategory = "conflicted" | "staged" | "unstaged" | "untracked";
 export type DiffScope = "working" | "staged" | "all" | "commit";
 
+export interface GitRepositoryInfo {
+  id: string;
+  name: string;
+  workspacePath: string;
+  repositoryRoot: string;
+  branch: string | null;
+  head: string | null;
+  detached: boolean;
+  current: boolean;
+  discoveryDepth: number;
+}
+
 export interface WorkspaceInfo {
   id: string;
   name: string;
   rootPath: string;
   openedAt: string;
-  git: null | { repositoryRoot: string; branch: string | null; head: string | null; detached: boolean };
+  git: null | GitRepositoryInfo;
+  repositories: GitRepositoryInfo[];
+  repositoryDiscovery: { depth: number; maxDirs: number; timedOut: boolean; truncated: boolean; checkedDirs: number };
 }
 
 export interface FileTreeEntry {
@@ -47,6 +61,7 @@ export interface GitChangedFile {
 }
 
 export interface GitStatusSnapshot {
+  repositoryId: string;
   revision: number;
   branch: string | null;
   head: string | null;
