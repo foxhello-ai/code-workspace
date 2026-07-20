@@ -1,4 +1,4 @@
-import type { ApiErrorBody, DiffDocument, FileContent, FileTreeEntry, GitBranchInfo, GitCommitDetail, GitCommitSummary, GitGraphCommit, GitStatusSnapshot, WorkspaceInfo } from "../shared/contracts";
+import type { ApiErrorBody, DiffDocument, FileContent, FileTreeEntry, GitBranchInfo, GitCommitDetail, GitCommitSummary, GitGraphCommit, GitRepositoryInfo, GitStatusSnapshot, WorkspaceInfo } from "../shared/contracts";
 
 export class ApiClientError extends Error {
   constructor(public status: number, public code: string, message: string, public details?: unknown) { super(message); }
@@ -32,12 +32,14 @@ export const api = {
   createDirectory: (path: string) => request<null>("/api/directories", { method: "POST", body: JSON.stringify({ path }) }),
   rename: (from: string, to: string) => request<null>("/api/files/rename", { method: "PATCH", body: JSON.stringify({ from, to }) }),
   remove: (path: string, recursive = false) => request<null>(`/api/files?path=${encodeURIComponent(path)}&recursive=${recursive}&confirmed=true`, { method: "DELETE" }),
-  gitStatus: () => request<GitStatusSnapshot>("/api/git/status"),
-  branches: () => request<GitBranchInfo[]>("/api/git/branches"),
-  switchBranch: (name: string, kind: "local" | "remote", allowDirty = false) => request<{ workspace: WorkspaceInfo; status: GitStatusSnapshot }>("/api/git/switch", { method: "POST", body: JSON.stringify({ name, kind, allowDirty }) }),
-  history: (cursor?: string) => request<{ items: GitCommitSummary[]; nextCursor: string | null; head: string | null }>(`/api/git/history?limit=50${cursor ? `&cursor=${cursor}` : ""}`),
-  graph: (cursor = 0) => request<{ items: GitGraphCommit[]; nextCursor: number | null; head: string | null }>(`/api/git/graph?limit=100&cursor=${cursor}`),
-  commit: (hash: string) => request<GitCommitDetail>(`/api/git/commits/${hash}`),
-  diff: (scope: "working" | "staged" | "all", path?: string) => request<DiffDocument>(`/api/git/diff?scope=${scope}${path ? `&path=${encodeURIComponent(path)}` : ""}`),
-  commitDiff: (hash: string, path?: string) => request<DiffDocument>(`/api/git/diff/commits/${hash}${path ? `?path=${encodeURIComponent(path)}` : ""}`)
+  repositories: () => request<GitRepositoryInfo[]>("/api/git/repositories"),
+  selectRepository: (repositoryId: string) => request<WorkspaceInfo>("/api/git/repository/select", { method: "POST", body: JSON.stringify({ repositoryId }) }),
+  gitStatus: (repositoryId?: string) => request<GitStatusSnapshot>(`/api/git/status${repositoryId ? `?repositoryId=${encodeURIComponent(repositoryId)}` : ""}`),
+  branches: (repositoryId?: string) => request<GitBranchInfo[]>(`/api/git/branches${repositoryId ? `?repositoryId=${encodeURIComponent(repositoryId)}` : ""}`),
+  switchBranch: (name: string, kind: "local" | "remote", allowDirty = false, repositoryId?: string) => request<{ workspace: WorkspaceInfo; status: GitStatusSnapshot }>("/api/git/switch", { method: "POST", body: JSON.stringify({ name, kind, allowDirty, repositoryId }) }),
+  history: (cursor?: string, repositoryId?: string) => request<{ items: GitCommitSummary[]; nextCursor: string | null; head: string | null }>(`/api/git/history?limit=50${cursor ? `&cursor=${cursor}` : ""}${repositoryId ? `&repositoryId=${encodeURIComponent(repositoryId)}` : ""}`),
+  graph: (cursor = 0, repositoryId?: string) => request<{ items: GitGraphCommit[]; nextCursor: number | null; head: string | null }>(`/api/git/graph?limit=100&cursor=${cursor}${repositoryId ? `&repositoryId=${encodeURIComponent(repositoryId)}` : ""}`),
+  commit: (hash: string, repositoryId?: string) => request<GitCommitDetail>(`/api/git/commits/${hash}${repositoryId ? `?repositoryId=${encodeURIComponent(repositoryId)}` : ""}`),
+  diff: (scope: "working" | "staged" | "all", path?: string, repositoryId?: string) => request<DiffDocument>(`/api/git/diff?scope=${scope}${path ? `&path=${encodeURIComponent(path)}` : ""}${repositoryId ? `&repositoryId=${encodeURIComponent(repositoryId)}` : ""}`),
+  commitDiff: (hash: string, path?: string, repositoryId?: string) => request<DiffDocument>(`/api/git/diff/commits/${hash}?${path ? `path=${encodeURIComponent(path)}&` : ""}${repositoryId ? `repositoryId=${encodeURIComponent(repositoryId)}` : ""}`)
 };
