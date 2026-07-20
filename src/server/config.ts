@@ -15,6 +15,9 @@ export const config = {
   fileReadonlyBytes: Number(process.env.FILE_READONLY_BYTES ?? 10 * 1024 * 1024),
   gitTimeoutMs: Number(process.env.GIT_TIMEOUT_MS ?? 10_000),
   gitMaxOutputBytes: Number(process.env.GIT_MAX_OUTPUT_BYTES ?? 50 * 1024 * 1024),
+  gitDiscoveryDepth: Number(process.env.GIT_DISCOVERY_DEPTH ?? 1),
+  gitDiscoveryMaxDirs: Number(process.env.GIT_DISCOVERY_MAX_DIRS ?? 200),
+  gitDiscoveryTimeoutMs: Number(process.env.GIT_DISCOVERY_TIMEOUT_MS ?? 5000),
   watchDebounceMs: Number(process.env.WATCH_DEBOUNCE_MS ?? 250),
   appPassword: process.env.APP_PASSWORD ?? (process.env.NODE_ENV === "test" ? "test-password" : passwordFromEnvFile() || "")
 };
