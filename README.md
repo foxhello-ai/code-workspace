@@ -83,6 +83,9 @@ npm run check
 | `FILE_READONLY_BYTES` | `10485760` | 只读阈值 |
 | `GIT_TIMEOUT_MS` | `10000` | Git 查询超时 |
 | `GIT_MAX_OUTPUT_BYTES` | `52428800` | Git 输出上限 |
+| `GIT_DISCOVERY_DEPTH` | `1` | Git 子仓库发现深度，`0` 只检测根目录，`1` 检测一级，`2` 检测二级 |
+| `GIT_DISCOVERY_MAX_DIRS` | `200` | Git 仓库发现最多检查目录数 |
+| `GIT_DISCOVERY_TIMEOUT_MS` | `5000` | Git 仓库发现总超时 |
 | `WATCH_DEBOUNCE_MS` | `250` | Git 状态刷新防抖 |
 | `APP_PASSWORD` | `` | 全局访问密码，可通过环境变量或未提交的 `.env` 覆盖 |
 
@@ -91,7 +94,7 @@ npm run check
 - 默认只监听本机地址。
 - 文件 API 只接受当前工作区的相对路径。
 - `.git` 目录不能通过文件 API 访问。
-- 指向工作区外的符号链接不能被打开。
+- 工作区内的符号链接会按目标类型展示为文件或文件夹；路径仍必须从工作区相对路径进入。
 - Git 命令不经过 shell，前端不能提交任意 Git 参数。
 - Git 功能为只读，不包含 stage、commit、discard、push 或 pull。
 
