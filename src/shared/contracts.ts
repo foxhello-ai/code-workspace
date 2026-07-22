@@ -34,6 +34,10 @@ export interface FileTreeEntry {
   expandable: boolean;
   gitState: GitState;
   descendantChanged?: boolean;
+  gitTrackedState?: "tracked" | "untracked" | "uncontrolled" | "repository";
+  repositoryId?: string;
+  repositoryPath?: string;
+  repositoryName?: string;
 }
 
 export interface FileContent {

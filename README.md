@@ -87,6 +87,7 @@ npm run check
 | `GIT_DISCOVERY_MAX_DIRS` | `200` | Git 仓库发现最多检查目录数 |
 | `GIT_DISCOVERY_TIMEOUT_MS` | `5000` | Git 仓库发现总超时 |
 | `WATCH_DEBOUNCE_MS` | `250` | Git 状态刷新防抖 |
+| `WATCH_MAX_FILES` | `5000` | 文件监听最大条目数，超过后自动关闭实时监听以保护 Git 查询 |
 | `APP_PASSWORD` | `` | 全局访问密码，可通过环境变量或未提交的 `.env` 覆盖 |
 
 ## 安全边界
@@ -106,4 +107,4 @@ npm run check
 - Merge Commit 默认与第一父提交比较。
 - 不包含远程部署认证；如修改 `HOST` 对外监听，需要另行增加认证和 TLS。
 
-设计与实施资料见 [docs/detailed-design.md](docs/detailed-design.md)、[docs/task-plan.md](docs/task-plan.md) 和 [docs/acceptance-report.md](docs/acceptance-report.md)。
+设计与实施资料见 [docs/detailed-design.md](docs/detailed-design.md)、[docs/task-plan.md](docs/task-plan.md)、[docs/acceptance-report.md](docs/acceptance-report.md) 和 [docs/backlog.md](docs/backlog.md)。
