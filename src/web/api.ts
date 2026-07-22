@@ -4,9 +4,20 @@ export class ApiClientError extends Error {
   constructor(public status: number, public code: string, message: string, public details?: unknown) { super(message); }
 }
 
+const SESSION_KEY = "code-workspace.session-id";
+export function apiSessionId() {
+  let value = sessionStorage.getItem(SESSION_KEY);
+  if (!value) {
+    value = crypto.randomUUID();
+    sessionStorage.setItem(SESSION_KEY, value);
+  }
+  return value;
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (init?.body && !headers.has("content-type")) headers.set("content-type", "application/json");
+  headers.set("x-code-workspace-session", apiSessionId());
   const response = await fetch(url, { ...init, headers });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
@@ -32,6 +43,7 @@ export const api = {
   createDirectory: (path: string) => request<null>("/api/directories", { method: "POST", body: JSON.stringify({ path }) }),
   rename: (from: string, to: string) => request<null>("/api/files/rename", { method: "PATCH", body: JSON.stringify({ from, to }) }),
   remove: (path: string, recursive = false) => request<null>(`/api/files?path=${encodeURIComponent(path)}&recursive=${recursive}&confirmed=true`, { method: "DELETE" }),
+  absolutePath: (path: string) => request<string>(`/api/files/absolute-path?path=${encodeURIComponent(path)}`),
   repositories: () => request<GitRepositoryInfo[]>("/api/git/repositories"),
   selectRepository: (repositoryId: string) => request<WorkspaceInfo>("/api/git/repository/select", { method: "POST", body: JSON.stringify({ repositoryId }) }),
   gitStatus: (repositoryId?: string) => request<GitStatusSnapshot>(`/api/git/status${repositoryId ? `?repositoryId=${encodeURIComponent(repositoryId)}` : ""}`),

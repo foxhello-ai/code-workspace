@@ -12,6 +12,7 @@ const tab = (id: string, dirty = false): Tab => ({
   diskVersion: "v1",
   language: "typescript",
   dirty,
+  saveState: dirty ? "pending" : "idle",
   externalState: "current"
 });
 
