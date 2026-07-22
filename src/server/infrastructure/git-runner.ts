@@ -7,12 +7,18 @@ export class GitRunner {
 
   run(args: string[], options: { allowFailure?: boolean; timeoutMs?: number; write?: boolean } = {}): Promise<Buffer> {
     return new Promise((resolve, reject) => {
-      const child = spawn("git", args, {
-        cwd: this.cwd,
-        shell: false,
-        env: { ...process.env, ...(options.write ? {} : { GIT_OPTIONAL_LOCKS: "0" }), LC_ALL: "C" },
-        stdio: ["ignore", "pipe", "pipe"]
-      });
+      let child;
+      try {
+        child = spawn("git", args, {
+          cwd: this.cwd,
+          shell: false,
+          env: { ...process.env, ...(options.write ? {} : { GIT_OPTIONAL_LOCKS: "0" }), LC_ALL: "C" },
+          stdio: ["ignore", "pipe", "pipe"]
+        });
+      } catch {
+        reject(new AppError(503, "GIT_UNAVAILABLE", "无法运行 Git"));
+        return;
+      }
       const stdout: Buffer[] = [];
       const stderr: Buffer[] = [];
       let size = 0;

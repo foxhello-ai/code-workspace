@@ -1,4 +1,6 @@
 import chokidar, { type FSWatcher } from "chokidar";
+import type { Dirent } from "node:fs";
+import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { config } from "../config.js";
 import { WorkspaceService } from "./workspace-service.js";
@@ -15,17 +17,16 @@ export class WatchService {
     await this.stop();
     const context = this.workspace.get();
     const root = context.info.rootPath;
+    const watchableEntries = await this.countWatchableEntries(root);
+    if (watchableEntries > config.watchMaxFiles) {
+      this.hub.emit(context.info.id, { type: "watcher.disabled", version: String(watchableEntries) });
+      return;
+    }
     this.watcher = chokidar.watch(root, {
       ignoreInitial: true,
       followSymlinks: false,
       awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 25 },
-      ignored: (candidate) => {
-        const rel = path.relative(root, candidate).replaceAll("\\", "/");
-        if (!rel) return false;
-        if (rel === ".git") return false;
-        if (rel.startsWith(".git/")) return !(/^\.git\/(HEAD|index|refs\/)/.test(rel));
-        return /(^|\/)(\.git|node_modules|target|dist|build|coverage|\.gradle|\.idea|\.cursor)(\/|$)/.test(rel) || /(~|\.swp|\.tmp)$/.test(rel);
-      }
+      ignored: (candidate) => this.ignored(root, candidate)
     });
     const send = (type: string, absolute: string) => {
       const rel = path.relative(root, absolute).replaceAll("\\", "/");
@@ -60,6 +61,37 @@ export class WatchService {
         this.hub.emit(context.info.id, { type: "git.statusChanged", revision: snapshot.revision });
       } catch { /* file editing remains available */ }
     }, config.watchDebounceMs);
+  }
+
+  private ignored(root: string, candidate: string) {
+    const rel = path.relative(root, candidate).replaceAll("\\", "/");
+    if (!rel) return false;
+    if (rel === ".git") return false;
+    if (rel.startsWith(".git/")) return !(/^\.git\/(HEAD|index|refs\/)/.test(rel));
+    return /(^|\/)(\.git|node_modules|target|dist|build|coverage|\.gradle|\.idea|\.cursor)(\/|$)/.test(rel) || /(~|\.swp|\.tmp)$/.test(rel);
+  }
+
+  private async countWatchableEntries(root: string) {
+    if (config.watchMaxFiles <= 0) return 0;
+    let count = 0;
+    const queue = [root];
+    while (queue.length) {
+      const current = queue.shift()!;
+      let entries: Dirent[];
+      try {
+        entries = await readdir(current, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        const absolute = path.join(current, entry.name);
+        if (this.ignored(root, absolute)) continue;
+        count++;
+        if (count > config.watchMaxFiles) return count;
+        if (entry.isDirectory()) queue.push(absolute);
+      }
+    }
+    return count;
   }
 
   async stop() {

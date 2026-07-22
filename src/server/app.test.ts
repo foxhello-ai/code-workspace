@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
@@ -98,6 +98,62 @@ describe("workspace API", () => {
       config.gitDiscoveryDepth = originalDepth;
       await Promise.all([aggregate, repoA, repoB].map((item) => rm(item, { recursive: true, force: true })));
     }
+  });
+
+  it("keeps Git APIs available when watcher file limit is exceeded", async () => {
+    const originalMaxFiles = config.watchMaxFiles;
+    try {
+      config.watchMaxFiles = 1;
+      const opened = await app.inject({ method: "POST", url: "/api/workspace/open", payload: { path: root } });
+      expect(opened.statusCode).toBe(200);
+
+      const history = await app.inject({ method: "GET", url: "/api/git/history" });
+      expect(history.statusCode).toBe(200);
+      expect(history.json().data.items[0].subject).toBe("initial");
+    } finally {
+      config.watchMaxFiles = originalMaxFiles;
+    }
+  });
+
+  it("keeps workspace state isolated by browser session", async () => {
+    const other = await mkdtemp(path.join(os.tmpdir(), "code-workspace-other-"));
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: other });
+      execFileSync("git", ["config", "user.name", "Tester"], { cwd: other });
+      execFileSync("git", ["config", "user.email", "tester@example.com"], { cwd: other });
+      await writeFile(path.join(other, "other.txt"), "other\n");
+      execFileSync("git", ["add", "other.txt"], { cwd: other });
+      execFileSync("git", ["commit", "-qm", "other"], { cwd: other });
+
+      const sessionA = { "x-code-workspace-session": "session-a" };
+      const sessionB = { "x-code-workspace-session": "session-b" };
+      await app.inject({ method: "POST", url: "/api/workspace/open", headers: sessionA, payload: { path: root } });
+      await app.inject({ method: "POST", url: "/api/workspace/open", headers: sessionB, payload: { path: other } });
+
+      const currentA = await app.inject({ method: "GET", url: "/api/workspace", headers: sessionA });
+      const currentB = await app.inject({ method: "GET", url: "/api/workspace", headers: sessionB });
+      expect(currentA.json().data.rootPath).toBe(await realpath(root));
+      expect(currentB.json().data.rootPath).toBe(await realpath(other));
+
+      await app.inject({ method: "POST", url: "/api/workspace/close", headers: sessionA });
+      expect((await app.inject({ method: "GET", url: "/api/workspace", headers: sessionA })).statusCode).toBe(404);
+      expect((await app.inject({ method: "GET", url: "/api/workspace", headers: sessionB })).json().data.rootPath).toBe(await realpath(other));
+    } finally {
+      await rm(other, { recursive: true, force: true });
+    }
+  });
+
+  it("marks visible files by Git control state", async () => {
+    await writeFile(path.join(root, "clean.txt"), "clean\n");
+    execFileSync("git", ["add", "clean.txt"], { cwd: root });
+    execFileSync("git", ["commit", "-qm", "tracked file"], { cwd: root });
+    await writeFile(path.join(root, "untracked.txt"), "new\n");
+
+    const tree = await app.inject({ method: "GET", url: "/api/files/tree" });
+    expect(tree.statusCode).toBe(200);
+    const entries = tree.json().data as Array<{ name: string; gitTrackedState?: string }>;
+    expect(entries.find((entry) => entry.name === "clean.txt")?.gitTrackedState).toBe("tracked");
+    expect(entries.find((entry) => entry.name === "untracked.txt")?.gitTrackedState).toBe("untracked");
   });
 
   it("rejects saving over an external change", async () => {

@@ -86,6 +86,13 @@ export class GitService {
     return new Set(output.split("\0").filter(Boolean));
   }
 
+  async tracked(paths: string[], repositoryId?: string) {
+    if (!paths.length) return new Set<string>();
+    const { runner } = this.context(repositoryId);
+    const output = await runner.text(["ls-files", "-z", "--cached", "--", ...paths], { allowFailure: true });
+    return new Set(output.split("\0").filter(Boolean));
+  }
+
   async branches(repositoryId?: string) {
     const { runner } = this.context(repositoryId);
     const format = "%(refname)%00%(refname:short)%00%(objectname)%00%(HEAD)%00%(upstream:short)%00";
