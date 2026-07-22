@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, ChevronDown, ChevronRight, ChevronsRight, Clock3, File, Folder, FolderOpen, GitBranch, GitFork, History, List, LockKeyhole, LogOut, RefreshCw, Save, Search, X, Files, GitCompare, Layers2, Plus, Trash2, XCircle } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronRight, ChevronsRight, Clock3, Copy, ExternalLink, File, Folder, FolderOpen, GitBranch, GitFork, History, List, LockKeyhole, LogOut, RefreshCw, Save, Search, X, Files, GitCompare, Layers2, Plus, Trash2, XCircle } from "lucide-react";
 import type { DiffDocument, FileTreeEntry, GitBranchInfo, GitChangedFile, GitCommitDetail, GitCommitSummary, GitGraphCommit, GitRepositoryInfo } from "../shared/contracts";
-import { api, ApiClientError } from "./api";
+import { api, ApiClientError, apiSessionId } from "./api";
 import { type TextTab, useAppStore } from "./store";
 
 type View = "files" | "changes" | "history";
 const RECENT_WORKSPACES_KEY = "code-workspace.recent-workspaces";
+const SIDEBAR_WIDTH_KEY = "code-workspace.sidebar-width";
+const DEFAULT_SIDEBAR_WIDTH = 290;
+const MIN_SIDEBAR_WIDTH = 180;
+const MAX_SIDEBAR_WIDTH = 520;
 
 function message(error: unknown) { return error instanceof Error ? error.message : "操作失败"; }
 function loadRecentWorkspaces() {
@@ -15,6 +19,10 @@ function loadRecentWorkspaces() {
     const value = JSON.parse(localStorage.getItem(RECENT_WORKSPACES_KEY) ?? "[]");
     return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").slice(0, 10) : [];
   } catch { return []; }
+}
+function loadSidebarWidth() {
+  const value = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY) ?? DEFAULT_SIDEBAR_WIDTH);
+  return Number.isFinite(value) ? Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, value)) : DEFAULT_SIDEBAR_WIDTH;
 }
 
 export function App() {
@@ -26,6 +34,7 @@ export function App() {
   const [recentWorkspaces, setRecentWorkspaces] = useState<string[]>(loadRecentWorkspaces);
   const [switchingWorkspace, setSwitchingWorkspace] = useState(false);
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth);
   const active = store.tabs.find((tab) => tab.id === store.activeId) ?? null;
   const currentRepository = store.workspace?.git ?? null;
 
@@ -43,9 +52,13 @@ export function App() {
     window.addEventListener("beforeunload", beforeUnload); return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [store.tabs]);
   useEffect(() => {
+    const timers = store.tabs.filter((tab): tab is TextTab => tab.type === "text" && tab.dirty && tab.externalState === "current" && tab.saveState === "pending").map((tab) => setTimeout(() => save(tab, tab.diskVersion, true), 1000));
+    return () => timers.forEach((timer) => clearTimeout(timer));
+  }, [store.tabs]);
+  useEffect(() => {
     if (!store.workspace) return;
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${location.host}/api/events?workspaceId=${store.workspace.id}`);
+    const ws = new WebSocket(`${protocol}//${location.host}/api/events?workspaceId=${store.workspace.id}&sessionId=${encodeURIComponent(apiSessionId())}`);
     ws.onmessage = async ({ data }) => {
       const envelope = JSON.parse(data);
       const event = envelope.event;
@@ -145,19 +158,48 @@ export function App() {
       setNotice(`当前 Git 项目：${repository.workspacePath || repository.name}`);
     } catch (error) { setNotice(`切换 Git 项目失败：${message(error)}`); }
   }
-  async function save(tab: TextTab, version = tab.diskVersion) {
-    try { const file = await api.save(tab.path, tab.bufferText, version); store.saved(tab.id, file); setNotice("已保存"); }
+  async function save(tab: TextTab, version = tab.diskVersion, automatic = false) {
+    const latest = useAppStore.getState().tabs.find((item): item is TextTab => item.id === tab.id && item.type === "text");
+    if (!latest || !latest.dirty || latest.externalState !== "current") return;
+    store.saving(latest.id);
+    try { const file = await api.save(latest.path, latest.bufferText, version); store.saved(latest.id, file); setNotice(automatic ? "已自动保存" : "已保存"); }
     catch (error) {
       if (error instanceof ApiClientError && error.code === "FILE_VERSION_CONFLICT") {
-        const disk = await api.file(tab.path); store.external(tab.path, disk); setNotice("磁盘内容已变化，请处理冲突");
-      } else setNotice(message(error));
+        const disk = await api.file(latest.path); store.external(latest.path, disk); store.saveFailed(latest.id, "磁盘内容已变化"); setNotice("磁盘内容已变化，请处理冲突");
+      } else { const text = message(error); store.saveFailed(latest.id, text); setNotice(text); }
     }
   }
 
   if (authenticated === null) return <div className="auth-loading"><LockKeyhole/><span>正在验证登录状态…</span></div>;
   if (!authenticated) return <LoginPage onLogin={() => { setAuthenticated(true); setNotice(""); }} />;
   if (!store.workspace) return <OpenWorkspace path={workspacePath} setPath={setWorkspacePath} open={openWorkspace} error={notice} recent={recentWorkspaces} removeRecent={removeRecentWorkspace} busy={switchingWorkspace} logout={async () => { await api.logout(); setAuthenticated(false); }} />;
-  return <div className="app-shell">
+  function startSidebarResize(event: React.PointerEvent<HTMLDivElement>) {
+    if (window.innerWidth <= 800) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = sidebarWidth;
+    let currentWidth = startWidth;
+    document.body.classList.add("resizing-sidebar");
+    const move = (moveEvent: PointerEvent) => {
+      const width = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, startWidth + moveEvent.clientX - startX));
+      currentWidth = width;
+      setSidebarWidth(width);
+    };
+    const up = () => {
+      document.body.classList.remove("resizing-sidebar");
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(currentWidth));
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+  function resetSidebarWidth() {
+    setSidebarWidth(DEFAULT_SIDEBAR_WIDTH);
+    localStorage.removeItem(SIDEBAR_WIDTH_KEY);
+  }
+
+  return <div className="app-shell" style={{ "--sidebar-width": `${sidebarWidth}px` } as React.CSSProperties}>
     <header className="topbar">
       <div className="brand">Code Workspace</div><div className="workspace-name">{store.workspace.name}</div>
       {store.workspace.repositories.length > 0 && (
@@ -183,6 +225,7 @@ export function App() {
       {view === "changes" && <Changes repository={currentRepository} onDiff={(scope, path) => openDiff(api.diff(scope, path, currentRepository?.id), `${repoLabel(currentRepository)} · ${scope}: ${path}`, currentRepository?.id)} />}
       {view === "history" && <HistoryPanel repository={currentRepository} onDiff={(hash, path) => openDiff(api.commitDiff(hash, path, currentRepository?.id), `${repoLabel(currentRepository)} · ${hash.slice(0, 7)}: ${path ?? "全部修改"}`, currentRepository?.id)} />}
     </aside>
+    <div className="sidebar-resizer" title="拖拽调整侧栏宽度，双击恢复默认" onPointerDown={startSidebarResize} onDoubleClick={resetSidebarWidth}/>
     <main className="editor-area">
       <div className="tab-strip">
         <div className="tabs">{store.tabs.map((tab) => <div key={tab.id} className={`tab ${tab.id === store.activeId ? "active" : ""}`} onClick={() => store.activate(tab.id)}>
@@ -199,7 +242,7 @@ export function App() {
         {active.externalState !== "current" && (
           <ConflictBar tab={active} save={save}/>
         )}
-        <div className="editor-toolbar"><span>{active.path}</span><button disabled={!active.dirty || active.externalState !== "current"} onClick={() => save(active)}><Save size={15}/>保存</button></div>
+        <div className="editor-toolbar"><span>{active.path}</span><span>{saveStateText(active)}</span><button disabled={!active.dirty || active.externalState !== "current" || active.saveState === "saving"} onClick={() => save(active)}><Save size={15}/>保存</button></div>
         {active.externalState === "changed" && active.diskText !== undefined ? <DiffEditor height="100%" theme="vs-dark" original={active.diskText} modified={active.bufferText} language={active.language} options={{ originalEditable: false, automaticLayout: true }}/>
           : <Editor
               height="100%"
@@ -261,18 +304,43 @@ function Explorer({ onOpen, onNotice }: { onOpen(path: string): void; onNotice(t
 
 function Tree({ path, expanded, setExpanded, onOpen, onNotice }: { path: string; expanded: Set<string>; setExpanded(v: Set<string>): void; onOpen(path: string): void; onNotice(text: string): void }) {
   const queryClient = useQueryClient();
+  const [menu, setMenu] = useState<{ x: number; y: number; entry: FileTreeEntry } | null>(null);
   const query = useQuery({ queryKey: ["tree", path], queryFn: () => api.tree(path), enabled: expanded.has(path) });
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", close);
+    window.addEventListener("scroll", close, true);
+    return () => { window.removeEventListener("click", close); window.removeEventListener("keydown", close); window.removeEventListener("scroll", close, true); };
+  }, [menu]);
+  async function copy(text: string) {
+    try { await navigator.clipboard.writeText(text); onNotice("已复制路径"); }
+    catch { prompt("复制路径", text); }
+  }
+  async function copyAbsolute(entry: FileTreeEntry) {
+    try { await copy(await api.absolutePath(entry.path)); }
+    catch (e) { onNotice(message(e)); }
+  }
+  async function showAbsolute(entry: FileTreeEntry) {
+    try { prompt("本地路径", await api.absolutePath(entry.path)); }
+    catch (e) { onNotice(message(e)); }
+  }
   if (query.isLoading) return <div className="tree-loading">加载中…</div>;
   return <div className="tree">{query.data?.map((entry) => <div key={entry.path}>
-    <div className="tree-row" title={entry.path} onDoubleClick={async () => {
+    <div className="tree-row" title={treeTitle(entry)} onContextMenu={(event) => { event.preventDefault(); setMenu({ x: event.clientX, y: event.clientY, entry }); }} onDoubleClick={async () => {
       const next = prompt("重命名为", entry.path); if (!next || next === entry.path) return; try { await api.rename(entry.path, next); queryClient.invalidateQueries({ queryKey: ["tree"] }); } catch (e) { onNotice(message(e)); }
     }}>
       {entry.kind === "directory" ? <button onClick={() => { const next = new Set(expanded); next.has(entry.path) ? next.delete(entry.path) : next.add(entry.path); setExpanded(next); }}>{expanded.has(entry.path) ? <ChevronDown/> : <ChevronRight/>}</button> : <span className="indent"/>}
-      <span className="entry" onClick={() => entry.kind === "directory" ? undefined : onOpen(entry.path)}>{entry.kind === "directory" ? expanded.has(entry.path) ? <FolderOpen/> : <Folder/> : <File/>}<span>{entry.name}</span>{entry.gitState && <em className={`git-${entry.gitState}`}>{stateLetter(entry.gitState)}</em>}{!entry.gitState && entry.descendantChanged && <em className="git-descendant">●</em>}</span>
+      <span className="entry" onClick={() => entry.kind === "directory" ? undefined : onOpen(entry.path)}>{entry.kind === "directory" ? expanded.has(entry.path) ? <FolderOpen/> : <Folder/> : <File/>}<span>{entry.name}</span><GitBadge entry={entry}/>{entry.gitState && <em className={`git-${entry.gitState}`}>{stateLetter(entry.gitState)}</em>}{!entry.gitState && entry.descendantChanged && <em className="git-descendant">●</em>}</span>
       <button className="row-action" title="删除" onClick={async () => { if (!confirm(`确定删除 ${entry.path}？`)) return; try { await api.remove(entry.path, entry.kind === "directory"); queryClient.invalidateQueries({ queryKey: ["tree"] }); } catch (e) { onNotice(message(e)); } }}><Trash2/></button>
     </div>
     {entry.kind === "directory" && expanded.has(entry.path) && <div className="nested"><Tree path={entry.path} expanded={expanded} setExpanded={setExpanded} onOpen={onOpen} onNotice={onNotice}/></div>}
-  </div>)}</div>;
+  </div>)}{menu && <div className="context-menu" style={{ left: menu.x, top: menu.y }} onClick={(event) => event.stopPropagation()}>
+    <button onClick={() => { copyAbsolute(menu.entry); setMenu(null); }}><Copy/>复制绝对路径</button>
+    <button onClick={() => { copy(menu.entry.path); setMenu(null); }}><Copy/>复制相对路径</button>
+    <button onClick={() => { showAbsolute(menu.entry); setMenu(null); }}><ExternalLink/>查看本地路径</button>
+  </div>}</div>;
 }
 
 function Changes({ repository, onDiff }: { repository: GitRepositoryInfo | null; onDiff(scope: "working" | "staged" | "all", path: string): void }) {
@@ -294,7 +362,7 @@ function HistoryPanel({ repository, onDiff }: { repository: GitRepositoryInfo | 
   const detail = useQuery({ queryKey: ["git", "commit", repository?.id, selected], queryFn: () => api.commit(selected!, repository?.id), enabled: Boolean(repository && selected) });
   if (!repository) return <PanelError text="未发现 Git 项目。可调整 GIT_DISCOVERY_DEPTH 后重新打开工作区。"/>;
   if (page.isError) return <PanelError text={message(page.error)}/>;
-  return <><PanelTitle title="Git 历史"><div className="history-modes"><button className={mode === "graph" ? "active" : ""} title="提交图" onClick={() => { setMode("graph"); setSelected(undefined); }}><GitFork/></button><button className={mode === "list" ? "active" : ""} title="线性列表" onClick={() => { setMode("list"); setSelected(undefined); }}><List/></button></div></PanelTitle><RepositorySummary repository={repository}/>{selected && detail.data ? <CommitDetails detail={detail.data} back={() => setSelected(undefined)} diff={onDiff}/> : mode === "graph" ? <CommitGraph repositoryId={repository.id} onSelect={setSelected}/> : <div className="history-list">{commits.map((commit) => <button key={commit.hash} onClick={() => setSelected(commit.hash)}><strong>{commit.subject}</strong><span><code>{commit.shortHash}</code>{commit.authorName}</span><time>{new Date(commit.committedAt).toLocaleString()}</time>{commit.parents.length > 1 && <em>merge</em>}</button>)}{page.data?.nextCursor && <button className="load-more" onClick={() => setCursor(page.data!.nextCursor)}>加载更多</button>}</div>}</>;
+  return <><PanelTitle title="Git 历史"><div className="history-modes"><button className={mode === "graph" ? "active" : ""} title="提交图" onClick={() => setMode("graph")}><GitFork/></button><button className={mode === "list" ? "active" : ""} title="线性列表" onClick={() => setMode("list")}><List/></button></div></PanelTitle><RepositorySummary repository={repository}/><div className="history-workbench"><div className="history-picker">{mode === "graph" ? <CommitGraph repositoryId={repository.id} selected={selected} onSelect={setSelected}/> : <div className="history-list">{commits.map((commit) => <button key={commit.hash} className={selected === commit.hash ? "selected" : ""} onClick={() => setSelected(commit.hash)}><strong>{commit.subject}</strong><span><code>{commit.shortHash}</code>{commit.authorName}</span><time>{new Date(commit.committedAt).toLocaleString()}</time>{commit.parents.length > 1 && <em>merge</em>}</button>)}{page.data?.nextCursor && <button className="load-more" onClick={() => setCursor(page.data!.nextCursor)}>加载更多</button>}</div>}</div>{detail.data ? <CommitDetails detail={detail.data} diff={onDiff}/> : selected ? <div className="panel-empty">加载提交详情…</div> : <div className="panel-empty">选择提交查看详情</div>}</div></>;
 }
 
 function BranchPicker({ current, repositoryId, onSwitch }: { current: string | null; repositoryId?: string; onSwitch(branch: GitBranchInfo): void }) {
@@ -314,7 +382,7 @@ function RepositorySummary({ repository }: { repository: GitRepositoryInfo }) {
   return <div className="repo-summary" title={repository.repositoryRoot}><strong>{repoLabel(repository)}</strong><span>{repository.workspacePath || "."}</span></div>;
 }
 
-function CommitGraph({ repositoryId, onSelect }: { repositoryId?: string; onSelect(hash: string): void }) {
+function CommitGraph({ repositoryId, selected, onSelect }: { repositoryId?: string; selected?: string; onSelect(hash: string): void }) {
   const [commits, setCommits] = useState<GitGraphCommit[]>([]);
   const [cursor, setCursor] = useState(0);
   useEffect(() => { setCommits([]); setCursor(0); }, [repositoryId]);
@@ -322,7 +390,7 @@ function CommitGraph({ repositoryId, onSelect }: { repositoryId?: string; onSele
   useEffect(() => { if (query.data) setCommits((current) => cursor ? [...current, ...query.data.items.filter((item) => !current.some((existing) => existing.hash === item.hash))] : query.data.items); }, [query.data]);
   const layout = useMemo(() => layoutCommitGraph(commits), [commits]);
   if (query.isError) return <PanelError text={message(query.error)}/>;
-  return <div className="commit-graph" style={{ "--graph-width": `${layout.width}px` } as React.CSSProperties}><svg width={layout.width} height={commits.length * 60} aria-hidden="true">{layout.edges.map((edge, index) => <path key={index} d={`M ${edge.x1} ${edge.y1} C ${edge.x1} ${(edge.y1 + edge.y2) / 2}, ${edge.x2} ${(edge.y1 + edge.y2) / 2}, ${edge.x2} ${edge.y2}`} stroke={graphColor(edge.color)} fill="none" strokeWidth="2"/>)}{layout.nodes.map((node) => <circle key={node.hash} cx={node.x} cy={node.y} r="4.5" fill="#11161d" stroke={graphColor(node.lane)} strokeWidth="2.5"/>)}</svg><div className="graph-rows">{commits.map((commit) => <button key={commit.hash} onClick={() => onSelect(commit.hash)}><strong>{commit.subject}</strong><div className="graph-decorations">{commit.decorations.map((decoration, index) => <em className={decoration.type} key={`${decoration.name}:${index}`}>{decoration.type === "head" && "HEAD · "}{decoration.name}</em>)}</div><span><code>{commit.shortHash}</code>{commit.authorName} · {new Date(commit.committedAt).toLocaleDateString()}</span></button>)}{query.data?.nextCursor !== null && query.data?.nextCursor !== undefined && <button className="graph-load" onClick={() => setCursor(query.data!.nextCursor!)}>加载更多提交</button>}</div></div>;
+  return <div className="commit-graph" style={{ "--graph-width": `${layout.width}px` } as React.CSSProperties}><svg width={layout.width} height={commits.length * 60} aria-hidden="true">{layout.edges.map((edge, index) => <path key={index} d={`M ${edge.x1} ${edge.y1} C ${edge.x1} ${(edge.y1 + edge.y2) / 2}, ${edge.x2} ${(edge.y1 + edge.y2) / 2}, ${edge.x2} ${edge.y2}`} stroke={graphColor(edge.color)} fill="none" strokeWidth="2"/>)}{layout.nodes.map((node) => <circle key={node.hash} cx={node.x} cy={node.y} r="4.5" fill="#11161d" stroke={graphColor(node.lane)} strokeWidth="2.5"/>)}</svg><div className="graph-rows">{commits.map((commit) => <button key={commit.hash} className={selected === commit.hash ? "selected" : ""} onClick={() => onSelect(commit.hash)}><strong>{commit.subject}</strong><div className="graph-decorations">{commit.decorations.map((decoration, index) => <em className={decoration.type} key={`${decoration.name}:${index}`}>{decoration.type === "head" && "HEAD · "}{decoration.name}</em>)}</div><span><code>{commit.shortHash}</code>{commit.authorName} · {new Date(commit.committedAt).toLocaleDateString()}</span></button>)}{query.data?.nextCursor !== null && query.data?.nextCursor !== undefined && <button className="graph-load" onClick={() => setCursor(query.data!.nextCursor!)}>加载更多提交</button>}</div></div>;
 }
 
 function layoutCommitGraph(commits: GitGraphCommit[]) {
@@ -350,7 +418,20 @@ function layoutCommitGraph(commits: GitGraphCommit[]) {
 
 function graphColor(index: number) { return ["#58a6ff", "#3fb950", "#d29922", "#bc8cff", "#f778ba", "#39c5cf", "#ff7b72"][index % 7]; }
 
-function CommitDetails({ detail, back, diff }: { detail: GitCommitDetail; back(): void; diff(hash: string, path?: string): void }) { return <div className="commit-detail"><button className="back" onClick={back}>← 返回历史</button><h3>{detail.subject}</h3><code>{detail.hash}</code><p>{detail.body}</p><div className="commit-meta">{detail.authorName} · {new Date(detail.committedAt).toLocaleString()} · +{detail.additions} -{detail.deletions}</div>{detail.files.map((file) => <button className="commit-file" key={`${file.status}:${file.path}`} onClick={() => diff(detail.hash, file.path)}><em>{file.status[0]}</em><span>{file.path}</span></button>)}</div>; }
+function CommitDetails({ detail, diff }: { detail: GitCommitDetail; diff(hash: string, path?: string): void }) { return <div className="commit-detail"><h3>{detail.subject}</h3><code>{detail.hash}</code><p>{detail.body}</p><div className="commit-meta">{detail.authorName} · {new Date(detail.committedAt).toLocaleString()} · +{detail.additions} -{detail.deletions}</div><button className="wide-action" onClick={() => diff(detail.hash)}>在编辑区查看全部 Diff</button>{detail.files.map((file) => <button className="commit-file" key={`${file.status}:${file.path}`} onClick={() => diff(detail.hash, file.path)}><em>{file.status[0]}</em><span>{file.path}</span></button>)}</div>; }
+
+function GitBadge({ entry }: { entry: FileTreeEntry }) {
+  if (entry.gitTrackedState === "repository") return <small className="git-badge repo" title={treeTitle(entry)}>repo</small>;
+  if (entry.gitTrackedState === "tracked" && !entry.gitState) return <small className="git-badge tracked" title={treeTitle(entry)}>T</small>;
+  if (entry.gitTrackedState === "untracked" && !entry.gitState) return <small className="git-badge untracked" title={treeTitle(entry)}>U</small>;
+  if (entry.gitTrackedState === "uncontrolled") return <small className="git-badge uncontrolled" title={treeTitle(entry)}>-</small>;
+  return null;
+}
+
+function treeTitle(entry: FileTreeEntry) {
+  const state = entry.gitTrackedState === "repository" ? `Git 项目根目录：${entry.repositoryName}` : entry.gitTrackedState === "tracked" ? `已受控：${entry.repositoryName}` : entry.gitTrackedState === "untracked" ? `未跟踪：${entry.repositoryName}` : entry.gitTrackedState === "uncontrolled" ? "不在 Git 仓库中" : "";
+  return state ? `${entry.path}\n${state}` : entry.path;
+}
 
 function ConflictBar({ tab, save }: { tab: TextTab; save(tab: TextTab, version?: string): void }) {
   const store = useAppStore();
@@ -359,6 +440,12 @@ function ConflictBar({ tab, save }: { tab: TextTab; save(tab: TextTab, version?:
 
 function PanelTitle({ title, children }: { title: string; children?: React.ReactNode }) { return <div className="panel-title"><strong>{title}</strong><span>{children}</span></div>; }
 function PanelError({ text }: { text: string }) { return <div className="panel-empty error">{text}</div>; }
+function saveStateText(tab: TextTab) {
+  if (tab.saveState === "saving") return "保存中…";
+  if (tab.saveState === "pending") return "等待自动保存";
+  if (tab.saveState === "error") return tab.saveError ? `自动保存失败：${tab.saveError}` : "自动保存失败";
+  return tab.dirty ? "未保存" : "已保存";
+}
 function languageFor(path: string) { const ext = path.split(".").at(-1); return ({ ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript", json: "json", md: "markdown", css: "css", html: "html", py: "python", yml: "yaml", yaml: "yaml" } as Record<string, string>)[ext ?? ""] ?? "plaintext"; }
 function stateLetter(state: string) { return ({ modified: "M", added: "A", deleted: "D", renamed: "R", untracked: "U", conflicted: "C" } as Record<string, string>)[state] ?? ""; }
 function isPreviewableImage(path: string) { return /\.(png|jpe?g|gif|webp|bmp|ico)$/i.test(path); }

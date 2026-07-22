@@ -10,6 +10,8 @@ export interface TextTab {
   diskVersion: string;
   language: string;
   dirty: boolean;
+  saveState: "idle" | "pending" | "saving" | "error";
+  saveError?: string;
   externalState: "current" | "changed" | "deleted";
   diskText?: string;
   diskNewVersion?: string;
@@ -35,7 +37,9 @@ interface AppState {
   closeAllTabs(): boolean;
   activate(id: string): void;
   edit(id: string, text: string): void;
+  saving(id: string): void;
   saved(id: string, file: FileContent): void;
+  saveFailed(id: string, error: string): void;
   external(path: string, file: FileContent | null): void;
   refreshImage(path: string, file: FileContent | null): void;
   markDiffsStale(): void;
@@ -50,7 +54,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (existing) return { activeId: existing.id };
     const id = `file:${file.path}`;
     const text = file.content ?? "";
-    return { tabs: [...state.tabs, { id, type: "text", path: file.path, savedText: text, bufferText: text, diskVersion: file.version, language: file.language ?? "plaintext", dirty: false, externalState: "current" }], activeId: id };
+    return { tabs: [...state.tabs, { id, type: "text", path: file.path, savedText: text, bufferText: text, diskVersion: file.version, language: file.language ?? "plaintext", dirty: false, saveState: "idle", externalState: "current" }], activeId: id };
   }),
   openImage: (file) => set((state) => {
     const existing = state.tabs.find((tab) => tab.type === "image" && tab.path === file.path);
@@ -101,8 +105,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     return true;
   },
   activate: (activeId) => set({ activeId }),
-  edit: (id, bufferText) => set((state) => ({ tabs: state.tabs.map((tab) => tab.id === id && tab.type === "text" ? { ...tab, bufferText, dirty: bufferText !== tab.savedText } : tab) })),
-  saved: (id, file) => set((state) => ({ tabs: state.tabs.map((tab) => tab.id === id && tab.type === "text" ? { ...tab, savedText: file.content ?? tab.bufferText, bufferText: file.content ?? tab.bufferText, diskVersion: file.version, dirty: false, externalState: "current", diskText: undefined, diskNewVersion: undefined } : tab) })),
+  edit: (id, bufferText) => set((state) => ({ tabs: state.tabs.map((tab) => tab.id === id && tab.type === "text" ? { ...tab, bufferText, dirty: bufferText !== tab.savedText, saveState: bufferText !== tab.savedText ? "pending" : "idle", saveError: undefined } : tab) })),
+  saving: (id) => set((state) => ({ tabs: state.tabs.map((tab) => tab.id === id && tab.type === "text" ? { ...tab, saveState: "saving", saveError: undefined } : tab) })),
+  saved: (id, file) => set((state) => ({ tabs: state.tabs.map((tab) => {
+    if (tab.id !== id || tab.type !== "text") return tab;
+    const savedText = file.content ?? tab.bufferText;
+    const stillCurrent = tab.externalState !== "current" || tab.bufferText === savedText;
+    return { ...tab, savedText, bufferText: stillCurrent ? savedText : tab.bufferText, diskVersion: file.version, dirty: !stillCurrent, saveState: stillCurrent ? "idle" : "pending", saveError: undefined, externalState: "current", diskText: undefined, diskNewVersion: undefined };
+  }) })),
+  saveFailed: (id, error) => set((state) => ({ tabs: state.tabs.map((tab) => tab.id === id && tab.type === "text" ? { ...tab, saveState: "error", saveError: error } : tab) })),
   external: (path, file) => set((state) => ({ tabs: state.tabs.map((tab) => {
     if (tab.type !== "text" || tab.path !== path) return tab;
     if (!file) return { ...tab, externalState: "deleted" };
