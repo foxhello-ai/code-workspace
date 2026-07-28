@@ -156,6 +156,38 @@ describe("workspace API", () => {
     expect(entries.find((entry) => entry.name === "untracked.txt")?.gitTrackedState).toBe("untracked");
   });
 
+  it("reports Git change counts for workspaces, repository roots and recent summaries", async () => {
+    await writeFile(path.join(root, "hello.txt"), "changed\n");
+    await writeFile(path.join(root, "new.txt"), "new\n");
+
+    const current = await app.inject({ method: "GET", url: "/api/workspace" });
+    expect(current.statusCode).toBe(200);
+    expect(current.json().data.changedRepositoryCount).toBe(1);
+    expect(current.json().data.changedFileCount).toBe(2);
+    expect(current.json().data.repositories[0].changedFileCount).toBe(2);
+
+    const summary = await app.inject({ method: "POST", url: "/api/workspaces/change-summary", payload: { paths: [root] } });
+    expect(summary.statusCode).toBe(200);
+    expect(summary.json().data[0]).toMatchObject({ path: root, repositoryCount: 1, changedRepositoryCount: 1, changedFileCount: 2 });
+
+    const aggregate = await mkdtemp(path.join(os.tmpdir(), "code-workspace-aggregate-"));
+    const originalDepth = config.gitDiscoveryDepth;
+    try {
+      await symlink(root, path.join(aggregate, "repo-a"));
+      config.gitDiscoveryDepth = 1;
+      const opened = await app.inject({ method: "POST", url: "/api/workspace/open", payload: { path: aggregate } });
+      expect(opened.statusCode).toBe(200);
+
+      const tree = await app.inject({ method: "GET", url: "/api/files/tree" });
+      expect(tree.statusCode).toBe(200);
+      const entries = tree.json().data as Array<{ name: string; gitTrackedState?: string; repositoryChangedFileCount?: number }>;
+      expect(entries.find((entry) => entry.name === "repo-a")).toMatchObject({ gitTrackedState: "repository", repositoryChangedFileCount: 2 });
+    } finally {
+      config.gitDiscoveryDepth = originalDepth;
+      await rm(aggregate, { recursive: true, force: true });
+    }
+  });
+
   it("rejects saving over an external change", async () => {
     const read = await app.inject({ method: "GET", url: "/api/files/content?path=hello.txt" });
     const file = read.json().data;

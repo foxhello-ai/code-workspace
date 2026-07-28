@@ -1,4 +1,4 @@
-import type { ApiErrorBody, DiffDocument, FileContent, FileTreeEntry, GitBranchInfo, GitCommitDetail, GitCommitSummary, GitGraphCommit, GitRepositoryInfo, GitStatusSnapshot, WorkspaceInfo } from "../shared/contracts";
+import type { ApiErrorBody, DiffDocument, FileContent, FileTreeEntry, GitBranchInfo, GitCommitDetail, GitCommitSummary, GitGraphCommit, GitRepositoryInfo, GitStatusSnapshot, WorkspaceChangeSummary, WorkspaceInfo } from "../shared/contracts";
 
 export class ApiClientError extends Error {
   constructor(public status: number, public code: string, message: string, public details?: unknown) { super(message); }
@@ -35,6 +35,7 @@ export const api = {
   logout: () => request<{ authenticated: boolean }>("/api/auth/logout", { method: "POST" }),
   workspace: () => request<WorkspaceInfo>("/api/workspace"),
   openWorkspace: (path: string) => request<WorkspaceInfo>("/api/workspace/open", { method: "POST", body: JSON.stringify({ path }) }),
+  workspaceChangeSummary: (paths: string[]) => request<WorkspaceChangeSummary[]>("/api/workspaces/change-summary", { method: "POST", body: JSON.stringify({ paths }) }),
   closeWorkspace: () => request<null>("/api/workspace/close", { method: "POST" }),
   tree: (path = "") => request<FileTreeEntry[]>(`/api/files/tree?path=${encodeURIComponent(path)}`),
   file: (path: string) => request<FileContent>(`/api/files/content?path=${encodeURIComponent(path)}`),

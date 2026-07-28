@@ -12,6 +12,7 @@ export interface GitRepositoryInfo {
   detached: boolean;
   current: boolean;
   discoveryDepth: number;
+  changedFileCount?: number;
 }
 
 export interface WorkspaceInfo {
@@ -22,6 +23,8 @@ export interface WorkspaceInfo {
   git: null | GitRepositoryInfo;
   repositories: GitRepositoryInfo[];
   repositoryDiscovery: { depth: number; maxDirs: number; timedOut: boolean; truncated: boolean; checkedDirs: number };
+  changedRepositoryCount?: number;
+  changedFileCount?: number;
 }
 
 export interface FileTreeEntry {
@@ -38,6 +41,16 @@ export interface FileTreeEntry {
   repositoryId?: string;
   repositoryPath?: string;
   repositoryName?: string;
+  repositoryChangedFileCount?: number;
+}
+
+export interface WorkspaceChangeSummary {
+  path: string;
+  name: string;
+  repositoryCount: number;
+  changedRepositoryCount: number;
+  changedFileCount: number;
+  error?: string;
 }
 
 export interface FileContent {

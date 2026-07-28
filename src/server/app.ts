@@ -12,6 +12,7 @@ import { GitService } from "./services/git-service.js";
 import { EventHub } from "./services/event-hub.js";
 import { WatchService } from "./services/watch-service.js";
 import { AuthService } from "./services/auth-service.js";
+import type { WorkspaceChangeSummary, WorkspaceInfo } from "../shared/contracts.js";
 
 export async function buildApp(options: { disableAuth?: boolean } = {}) {
   const app = Fastify({ logger: true, bodyLimit: 12 * 1024 * 1024, genReqId: () => crypto.randomUUID() });
@@ -60,9 +61,21 @@ export async function buildApp(options: { disableAuth?: boolean } = {}) {
     return reply.header("set-cookie", auth.cookie(isSecure(request))).send({ data: { authenticated: true }, requestId: request.id });
   });
   app.post("/api/auth/logout", async (request, reply) => reply.header("set-cookie", auth.clearCookie(isSecure(request))).send({ data: { authenticated: false }, requestId: request.id }));
-  app.post<{ Body: { path: string } }>("/api/workspace/open", async (request) => ({ data: await session(request).workspace.open(request.body.path), requestId: request.id }));
-  app.get("/api/workspace", async (request) => ({ data: session(request).workspace.get().info, requestId: request.id }));
+  app.post<{ Body: { path: string } }>("/api/workspace/open", async (request) => {
+    const scope = session(request);
+    const info = await scope.workspace.open(request.body.path);
+    return { data: await withChangeCounts(scope, info), requestId: request.id };
+  });
+  app.get("/api/workspace", async (request) => {
+    const scope = session(request);
+    return { data: await withChangeCounts(scope), requestId: request.id };
+  });
   app.post("/api/workspace/close", async (request) => { await session(request).workspace.close(); return { data: null, requestId: request.id }; });
+  app.post<{ Body: { paths: string[] } }>("/api/workspaces/change-summary", async (request) => {
+    const paths = Array.isArray(request.body?.paths) ? request.body.paths.filter((item): item is string => typeof item === "string").slice(0, 10) : [];
+    const data = await Promise.all(paths.map(workspaceChangeSummary));
+    return { data, requestId: request.id };
+  });
 
   const gitState = (file: { indexStatus: string; worktreeStatus: string; categories: string[] }) => {
     if (file.categories.includes("conflicted")) return "conflicted";
@@ -72,6 +85,52 @@ export async function buildApp(options: { disableAuth?: boolean } = {}) {
   };
   const insideOrSame = (parent: string, child: string) => parent === "" || child === parent || child.startsWith(`${parent}/`);
   const relativeToRepo = (workspacePath: string, repoPath: string) => repoPath ? workspacePath === repoPath ? "" : workspacePath.startsWith(`${repoPath}/`) ? workspacePath.slice(repoPath.length + 1) : null : workspacePath;
+  const withChangeCounts = async (scope: { workspace: WorkspaceService; git: GitService }, info = scope.workspace.get().info): Promise<WorkspaceInfo> => {
+    const snapshots = await Promise.all(info.repositories.map(async (repository) => ({
+      repository,
+      snapshot: await scope.git.status(true, repository.id).catch(() => null)
+    })));
+    const repositories = info.repositories.map((repository) => {
+      const snapshot = snapshots.find((item) => item.repository.id === repository.id)?.snapshot;
+      return { ...repository, changedFileCount: snapshot?.files.length ?? 0 };
+    });
+    const changedRepositoryCount = repositories.filter((repository) => (repository.changedFileCount ?? 0) > 0).length;
+    const changedFileCount = repositories.reduce((total, repository) => total + (repository.changedFileCount ?? 0), 0);
+    const currentId = info.git?.id;
+    const enriched = {
+      ...info,
+      repositories,
+      git: currentId ? repositories.find((repository) => repository.id === currentId) ?? null : null,
+      changedRepositoryCount,
+      changedFileCount
+    };
+    scope.workspace.get().info = enriched;
+    return enriched;
+  };
+  const workspaceChangeSummary = async (workspacePath: string): Promise<WorkspaceChangeSummary> => {
+    try {
+      const workspace = new WorkspaceService();
+      const git = new GitService(workspace);
+      const info = await workspace.open(workspacePath);
+      const enriched = await withChangeCounts({ workspace, git }, info);
+      return {
+        path: workspacePath,
+        name: enriched.name,
+        repositoryCount: enriched.repositories.length,
+        changedRepositoryCount: enriched.changedRepositoryCount ?? 0,
+        changedFileCount: enriched.changedFileCount ?? 0
+      };
+    } catch (error) {
+      return {
+        path: workspacePath,
+        name: path.basename(workspacePath),
+        repositoryCount: 0,
+        changedRepositoryCount: 0,
+        changedFileCount: 0,
+        error: error instanceof AppError ? error.message : "无法读取工作区变更"
+      };
+    }
+  };
 
   app.get<{ Querystring: { path?: string; showHidden?: string; showIgnored?: string } }>("/api/files/tree", async (request) => {
     const scope = session(request);
@@ -81,7 +140,7 @@ export async function buildApp(options: { disableAuth?: boolean } = {}) {
       const snapshots = await Promise.all(repositories.map(async (repository) => {
         const paths = data.map((entry) => ({ entry, repoPath: relativeToRepo(entry.path, repository.workspacePath) })).filter((item): item is { entry: typeof data[number]; repoPath: string } => item.repoPath !== null);
         const [snapshot, tracked] = await Promise.all([
-          scope.git.status(false, repository.id).catch(() => null),
+          scope.git.status(true, repository.id).catch(() => null),
           scope.git.tracked(paths.map((item) => item.repoPath).filter(Boolean), repository.id).catch(() => new Set<string>())
         ]);
         return { repository, snapshot, tracked };
@@ -102,6 +161,7 @@ export async function buildApp(options: { disableAuth?: boolean } = {}) {
             entry.repositoryId = repository.id;
             entry.repositoryPath = "";
             entry.repositoryName = repository.name;
+            entry.repositoryChangedFileCount = snapshot?.files.length ?? 0;
             entry.descendantChanged ||= entry.kind === "directory" && Boolean(snapshot?.files.length);
             continue;
           }
@@ -158,11 +218,23 @@ export async function buildApp(options: { disableAuth?: boolean } = {}) {
   app.get<{ Querystring: { path: string } }>("/api/files/absolute-path", async (request) => ({ data: (await session(request).workspace.get().guard.resolveExisting(request.query.path)).absolute, requestId: request.id }));
 
   app.get<{ Querystring: { repositoryId?: string } }>("/api/git/repository", async (request) => { const scope = session(request); return { data: request.query.repositoryId ? scope.workspace.getRepository(request.query.repositoryId).repository : scope.workspace.get().info.git, requestId: request.id }; });
-  app.get("/api/git/repositories", async (request) => ({ data: session(request).workspace.repositories(), requestId: request.id }));
-  app.post<{ Body: { repositoryId: string } }>("/api/git/repository/select", async (request) => { const scope = session(request); scope.git.invalidate(); return { data: await scope.workspace.selectRepository(request.body.repositoryId), requestId: request.id }; });
-  app.get<{ Querystring: { repositoryId?: string } }>("/api/git/status", async (request) => ({ data: await session(request).git.status(false, request.query.repositoryId), requestId: request.id }));
+  app.get("/api/git/repositories", async (request) => {
+    const scope = session(request);
+    return { data: (await withChangeCounts(scope)).repositories, requestId: request.id };
+  });
+  app.post<{ Body: { repositoryId: string } }>("/api/git/repository/select", async (request) => {
+    const scope = session(request);
+    scope.git.invalidate();
+    const info = await scope.workspace.selectRepository(request.body.repositoryId);
+    return { data: await withChangeCounts(scope, info), requestId: request.id };
+  });
+  app.get<{ Querystring: { repositoryId?: string } }>("/api/git/status", async (request) => ({ data: await session(request).git.status(true, request.query.repositoryId), requestId: request.id }));
   app.get<{ Querystring: { repositoryId?: string } }>("/api/git/branches", async (request) => ({ data: await session(request).git.branches(request.query.repositoryId), requestId: request.id }));
-  app.post<{ Body: { name: string; kind: "local" | "remote"; allowDirty?: boolean; repositoryId?: string } }>("/api/git/switch", async (request) => ({ data: await session(request).git.switchBranch(request.body.name, request.body.kind, Boolean(request.body.allowDirty), request.body.repositoryId), requestId: request.id }));
+  app.post<{ Body: { name: string; kind: "local" | "remote"; allowDirty?: boolean; repositoryId?: string } }>("/api/git/switch", async (request) => {
+    const scope = session(request);
+    const result = await scope.git.switchBranch(request.body.name, request.body.kind, Boolean(request.body.allowDirty), request.body.repositoryId);
+    return { data: { ...result, workspace: await withChangeCounts(scope, result.workspace) }, requestId: request.id };
+  });
   app.get<{ Querystring: { cursor?: string; limit?: string; repositoryId?: string } }>("/api/git/history", async (request) => ({ data: await session(request).git.history(request.query.cursor, Number(request.query.limit ?? 50), request.query.repositoryId), requestId: request.id }));
   app.get<{ Querystring: { cursor?: string; limit?: string; repositoryId?: string } }>("/api/git/graph", async (request) => ({ data: await session(request).git.graph(Number(request.query.cursor ?? 0), Number(request.query.limit ?? 100), request.query.repositoryId), requestId: request.id }));
   app.get<{ Params: { hash: string }; Querystring: { repositoryId?: string } }>("/api/git/commits/:hash", async (request) => ({ data: await session(request).git.commit(request.params.hash, request.query.repositoryId), requestId: request.id }));
