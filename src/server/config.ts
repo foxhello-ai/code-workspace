@@ -10,7 +10,7 @@ function passwordFromEnvFile() {
 
 export const config = {
   host: process.env.HOST ?? "127.0.0.1",
-  port: Number(process.env.PORT ?? 4311),
+  port: Number(process.env.PORT ?? 43110),
   fileWarnBytes: Number(process.env.FILE_WARN_BYTES ?? 2 * 1024 * 1024),
   fileReadonlyBytes: Number(process.env.FILE_READONLY_BYTES ?? 10 * 1024 * 1024),
   gitTimeoutMs: Number(process.env.GIT_TIMEOUT_MS ?? 10_000),

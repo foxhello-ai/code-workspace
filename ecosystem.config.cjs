@@ -16,7 +16,7 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         HOST: "0.0.0.0",
-        PORT: "4311"
+        PORT: "43110"
       },
       out_file: "/tmp/code-workspace-pm2-out.log",
       error_file: "/tmp/code-workspace-pm2-error.log",
