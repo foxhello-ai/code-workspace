@@ -35,7 +35,7 @@ npm run dev
 ```
 
 - Web 开发地址：`http://127.0.0.1:4312`
-- API 地址：`http://127.0.0.1:4311`
+- API 地址：`http://127.0.0.1:43110`
 
 ## 生产运行
 
@@ -44,7 +44,17 @@ npm run build
 npm start
 ```
 
-浏览器访问 `http://127.0.0.1:4311`。
+浏览器访问 `http://127.0.0.1:43110`。
+
+## 快速安装
+
+macOS 或 Linux 可直接安装最新 GitHub Release。脚本会校验发布包、生成随机访问密码并启动服务：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | bash
+```
+
+安装完成后访问 `http://127.0.0.1:43110`。完整的前置条件、升级、配置与服务管理说明见 [安装文档](docs/installation.md)。
 
 ### PM2 持久运行
 
@@ -63,7 +73,7 @@ npm run pm2:logs
 npx pm2 status
 ```
 
-PM2 配置位于 `ecosystem.config.cjs`，服务异常退出后会自动重启，并固定监听 `0.0.0.0:4311`。
+PM2 配置位于 `ecosystem.config.cjs`，服务异常退出后会自动重启，并固定监听 `0.0.0.0:43110`。
 
 ## 验证
 
@@ -78,7 +88,7 @@ npm run check
 | 环境变量 | 默认值 | 说明 |
 |---|---:|---|
 | `HOST` | `127.0.0.1` | 服务监听地址 |
-| `PORT` | `4311` | 服务端口 |
+| `PORT` | `43110` | 服务端口 |
 | `FILE_WARN_BYTES` | `2097152` | 大文件警告阈值 |
 | `FILE_READONLY_BYTES` | `10485760` | 只读阈值 |
 | `GIT_TIMEOUT_MS` | `10000` | Git 查询超时 |
