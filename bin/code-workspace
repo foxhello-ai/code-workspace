@@ -1,0 +1,138 @@
+#!/usr/bin/env sh
+set -eu
+
+APP_HOME="${CODE_WORKSPACE_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/code-workspace}"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/code-workspace"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/code-workspace"
+CURRENT_DIR="$APP_HOME/current"
+CONFIG_FILE="$CONFIG_DIR/config.env"
+PID_FILE="$STATE_DIR/server.pid"
+LOG_FILE="$STATE_DIR/server.log"
+
+config_value() {
+  key="$1"
+  [ -r "$CONFIG_FILE" ] || return 0
+  sed -n "s/^${key}=//p" "$CONFIG_FILE" | head -n 1
+}
+
+load_config() {
+  if [ -z "${HOST:-}" ]; then HOST="$(config_value HOST)"; fi
+  if [ -z "${PORT:-}" ]; then PORT="$(config_value PORT)"; fi
+  if [ -z "${APP_PASSWORD:-}" ]; then APP_PASSWORD="$(config_value APP_PASSWORD)"; fi
+  HOST="${HOST:-127.0.0.1}"
+  PORT="${PORT:-43110}"
+  export HOST PORT APP_PASSWORD
+}
+
+require_runtime() {
+  [ -f "$CURRENT_DIR/dist/server/server/index.js" ] || {
+    echo "未找到 Code Workspace 安装目录：$CURRENT_DIR" >&2
+    exit 1
+  }
+  command -v node >/dev/null 2>&1 || {
+    echo "未找到 Node.js。请安装 Node.js 22 或更高版本后重试。" >&2
+    exit 1
+  }
+  node_major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || true)"
+  case "$node_major" in
+    ''|*[!0-9]*) echo "无法识别 Node.js 版本。" >&2; exit 1 ;;
+  esac
+  [ "$node_major" -ge 22 ] || {
+    echo "需要 Node.js 22 或更高版本，当前版本为 $(node --version)。" >&2
+    exit 1
+  }
+  load_config
+  [ -n "${APP_PASSWORD:-}" ] || {
+    echo "未配置 APP_PASSWORD。请重新执行安装脚本，或在 $CONFIG_FILE 中设置。" >&2
+    exit 1
+  }
+}
+
+process_matches() {
+  [ -f "$PID_FILE" ] || return 1
+  pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+  case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+  kill -0 "$pid" 2>/dev/null || return 1
+  ps -p "$pid" -o command= 2>/dev/null | grep -F "$APP_HOME/current/dist/server/server/index.js" >/dev/null 2>&1
+}
+
+start() {
+  require_runtime
+  mkdir -p "$STATE_DIR"
+  if process_matches; then
+    echo "Code Workspace 已在运行：http://127.0.0.1:$PORT"
+    return 0
+  fi
+  rm -f "$PID_FILE"
+  nohup "$0" run >>"$LOG_FILE" 2>&1 < /dev/null &
+  printf '%s\n' "$!" > "$PID_FILE"
+  if command -v curl >/dev/null 2>&1; then
+    attempt=0
+    while [ "$attempt" -lt 20 ]; do
+      if curl -fsS --max-time 1 "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
+        echo "Code Workspace 已启动：http://127.0.0.1:$PORT"
+        return 0
+      fi
+      attempt=$((attempt + 1))
+      sleep 1
+    done
+    echo "服务未在预期时间内就绪，请查看日志：$LOG_FILE" >&2
+    return 1
+  fi
+  echo "Code Workspace 已在后台启动，访问：http://127.0.0.1:$PORT"
+}
+
+stop() {
+  if ! process_matches; then
+    rm -f "$PID_FILE"
+    echo "Code Workspace 未运行。"
+    return 0
+  fi
+  pid="$(cat "$PID_FILE")"
+  kill "$pid"
+  attempt=0
+  while kill -0 "$pid" 2>/dev/null && [ "$attempt" -lt 10 ]; do
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    echo "服务未能停止，请检查进程 $pid。" >&2
+    return 1
+  fi
+  rm -f "$PID_FILE"
+  echo "Code Workspace 已停止。"
+}
+
+case "${1:-start}" in
+  run)
+    require_runtime
+    cd "$CURRENT_DIR"
+    exec node "$CURRENT_DIR/dist/server/server/index.js"
+    ;;
+  start)
+    start
+    ;;
+  stop)
+    stop
+    ;;
+  restart)
+    stop
+    start
+    ;;
+  status)
+    load_config
+    if process_matches; then
+      echo "Code Workspace 正在运行：http://127.0.0.1:$PORT"
+    else
+      echo "Code Workspace 未运行。"
+      exit 1
+    fi
+    ;;
+  logs)
+    [ -f "$LOG_FILE" ] && tail -n 100 "$LOG_FILE" || echo "暂无日志：$LOG_FILE"
+    ;;
+  *)
+    echo "用法：code-workspace {start|stop|restart|status|logs}" >&2
+    exit 64
+    ;;
+esac
