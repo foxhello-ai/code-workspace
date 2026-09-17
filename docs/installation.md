@@ -20,10 +20,10 @@ curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scr
 
 安装完成后在浏览器访问 `http://127.0.0.1:43110`。终端会输出访问密码；密码保存在 `~/.config/code-workspace/config.env`，该文件权限仅限当前用户读取。
 
-安装脚本从 GitHub Latest Release 下载固定版本发布包，并对下载内容执行 SHA-256 校验。需要安装指定版本时：
+安装脚本从 GitHub Latest Release 的稳定下载地址获取发布包，并对下载内容执行 SHA-256 校验，不依赖 GitHub API 配额。需要安装指定版本时：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | CODE_WORKSPACE_VERSION=1.1.0 bash
+curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | CODE_WORKSPACE_VERSION=1.1.1 bash
 ```
 
 ## 日常使用
@@ -68,11 +68,11 @@ PORT=43111 APP_PASSWORD='replace-with-a-strong-password' code-workspace restart
 
 ## 发布维护者
 
-GitHub Actions 在推送与 `package.json` 版本完全一致的 tag 时自动执行检查、构建并创建 Release。例如当前版本为 `1.1.0`：
+GitHub Actions 在推送与 `package.json` 版本完全一致的 tag 时自动执行检查、构建并创建 Release。例如当前版本为 `1.1.1`：
 
 ```bash
-git tag v1.1.0
-git push origin v1.1.0
+git tag v1.1.1
+git push origin v1.1.1
 ```
 
 Release 包含 `code-workspace-<version>.tar.gz` 与对应的 SHA-256 文件。工作流文件位于 `.github/workflows/release.yml`。

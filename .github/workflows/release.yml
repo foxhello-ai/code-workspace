@@ -39,6 +39,14 @@ jobs:
       - name: Build release archive
         run: npm run package:release
 
+      - name: Create latest release aliases
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          archive="release/code-workspace-${RELEASE_TAG#v}.tar.gz"
+          cp "$archive" release/code-workspace-latest.tar.gz
+          sha256sum release/code-workspace-latest.tar.gz | sed 's#  .*#  code-workspace-latest.tar.gz#' > release/code-workspace-latest.tar.gz.sha256
+
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
