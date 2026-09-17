@@ -1,6 +1,6 @@
 {
   "name": "code-workspace",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,7 @@
     "dev:server": "tsx watch src/server/index.ts",
     "dev:web": "vite",
     "build": "tsc -p tsconfig.server.json && vite build",
+    "package:release": "npm run build && node scripts/package-release.mjs",
     "start": "node dist/server/server/index.js",
     "pm2:start": "pm2 start ecosystem.config.cjs --update-env",
     "pm2:restart": "pm2 restart code-workspace --update-env",
