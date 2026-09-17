@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Verify tag matches package version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          expected="v$(node -p 'require("./package.json").version')"
+          test "$RELEASE_TAG" = "$expected"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify project
+        run: npm run check
+
+      - name: Build release archive
+        run: npm run package:release
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release/*.tar.gz release/*.sha256 --clobber
+          else
+            gh release create "$RELEASE_TAG" release/*.tar.gz release/*.sha256 --title "Code Workspace $RELEASE_TAG" --generate-notes
+          fi
