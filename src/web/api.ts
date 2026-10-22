@@ -1,4 +1,4 @@
-import type { ApiErrorBody, DiffDocument, FileContent, FileTreeEntry, GitBranchInfo, GitCommitDetail, GitCommitSummary, GitGraphCommit, GitRepositoryInfo, GitStatusSnapshot, WorkspaceChangeSummary, WorkspaceInfo } from "../shared/contracts";
+import type { GitFetchResult, GitHistoryPage, HistoryScope, WorktreeOverview, RemovalPreview, ApiErrorBody, DiffDocument, FileContent, FileTreeEntry, GitBranchInfo, GitCommitDetail, GitCommitSummary, GitGraphCommit, GitRepositoryInfo, GitStatusSnapshot, WorkspaceChangeSummary, WorkspaceInfo } from "../shared/contracts";
 
 export class ApiClientError extends Error {
   constructor(public status: number, public code: string, message: string, public details?: unknown) { super(message); }
@@ -48,10 +48,16 @@ export const api = {
   repositories: () => request<GitRepositoryInfo[]>("/api/git/repositories"),
   selectRepository: (repositoryId: string) => request<WorkspaceInfo>("/api/git/repository/select", { method: "POST", body: JSON.stringify({ repositoryId }) }),
   gitStatus: (repositoryId?: string) => request<GitStatusSnapshot>(`/api/git/status${repositoryId ? `?repositoryId=${encodeURIComponent(repositoryId)}` : ""}`),
+  refs: (repositoryId: string) => request<Array<{ fullName: string; name: string; kind: string }>>(`/api/git/refs?repositoryId=${encodeURIComponent(repositoryId)}`),
   branches: (repositoryId?: string) => request<GitBranchInfo[]>(`/api/git/branches${repositoryId ? `?repositoryId=${encodeURIComponent(repositoryId)}` : ""}`),
   switchBranch: (name: string, kind: "local" | "remote", allowDirty = false, repositoryId?: string) => request<{ workspace: WorkspaceInfo; status: GitStatusSnapshot }>("/api/git/switch", { method: "POST", body: JSON.stringify({ name, kind, allowDirty, repositoryId }) }),
-  history: (cursor?: string, repositoryId?: string) => request<{ items: GitCommitSummary[]; nextCursor: string | null; head: string | null }>(`/api/git/history?limit=50${cursor ? `&cursor=${cursor}` : ""}${repositoryId ? `&repositoryId=${encodeURIComponent(repositoryId)}` : ""}`),
-  graph: (cursor = 0, repositoryId?: string) => request<{ items: GitGraphCommit[]; nextCursor: number | null; head: string | null }>(`/api/git/graph?limit=100&cursor=${cursor}${repositoryId ? `&repositoryId=${encodeURIComponent(repositoryId)}` : ""}`),
+  history: (cursor = 0, repositoryId?: string, options: { scope?: HistoryScope; ref?: string; graphRevision?: string } = {}) => request<GitHistoryPage>(`/api/git/history?${new URLSearchParams({ cursor: String(cursor), limit: "100", ...(repositoryId ? { repositoryId } : {}), ...options })}`),
+  graph: (cursor = 0, repositoryId?: string, options: { scope?: HistoryScope; ref?: string; graphRevision?: string } = {}) => request<GitHistoryPage>(`/api/git/graph?${new URLSearchParams({ cursor: String(cursor), limit: "100", ...(repositoryId ? { repositoryId } : {}), ...options })}`),
+  sync: (repositoryGroupId: string) => request<GitFetchResult | null>(`/api/git/sync?repositoryGroupId=${encodeURIComponent(repositoryGroupId)}`),
+  fetch: (repositoryGroupId: string) => request<GitFetchResult>("/api/git/fetch", { method: "POST", body: JSON.stringify({ repositoryGroupId }) }),
+  worktrees: () => request<WorktreeOverview>("/api/git/worktrees"),
+  removalPreview: (worktreeId: string) => request<RemovalPreview>(`/api/git/worktrees/${encodeURIComponent(worktreeId)}/removal-preview`, { method: "POST" }),
+  editorState: (workspaceId: string, paths: string[], dirtyPaths: string[]) => request<null>("/api/git/editor-state", { method: "POST", body: JSON.stringify({ workspaceId, paths, dirtyPaths }) }),
   commit: (hash: string, repositoryId?: string) => request<GitCommitDetail>(`/api/git/commits/${hash}${repositoryId ? `?repositoryId=${encodeURIComponent(repositoryId)}` : ""}`),
   diff: (scope: "working" | "staged" | "all", path?: string, repositoryId?: string) => request<DiffDocument>(`/api/git/diff?scope=${scope}${path ? `&path=${encodeURIComponent(path)}` : ""}${repositoryId ? `&repositoryId=${encodeURIComponent(repositoryId)}` : ""}`),
   commitDiff: (hash: string, path?: string, repositoryId?: string) => request<DiffDocument>(`/api/git/diff/commits/${hash}?${path ? `path=${encodeURIComponent(path)}&` : ""}${repositoryId ? `repositoryId=${encodeURIComponent(repositoryId)}` : ""}`)
