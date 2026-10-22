@@ -25,7 +25,7 @@ rmSync(archivePath, { force: true });
 rmSync(checksumPath, { force: true });
 mkdirSync(packageDir, { recursive: true });
 
-for (const source of ["dist", "bin", "package.json", "package-lock.json", "README.md"]) {
+for (const source of ["dist", "bin", "package.json", "package-lock.json", "README.md", "README.en.md"]) {
   cpSync(path.join(root, source), path.join(packageDir, source), { recursive: true });
 }
 

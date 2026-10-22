@@ -73,6 +73,11 @@ mkdir -p "$APP_HOME/versions" "$BIN_DIR" "$CONFIG_DIR"
 if [ ! -d "$target_dir" ]; then
   mv "$temporary_dir/code-workspace" "$target_dir"
 fi
+# Stop the managed process while current still points to its original installation.
+# Updating the symlink alone does not replace the code already loaded by Node.js.
+if [ -x "$APP_HOME/current/bin/code-workspace" ]; then
+  "$APP_HOME/current/bin/code-workspace" stop
+fi
 ln -sfn "$target_dir" "$APP_HOME/current"
 ln -sfn "$APP_HOME/current/bin/code-workspace" "$BIN_DIR/code-workspace"
 chmod +x "$target_dir/bin/code-workspace"

@@ -196,3 +196,34 @@ npm start
 - 地址分类依据本地 Git 配置，不联网解析或猜测不同 SSH/HTTPS 写法是否指向同一远程；相同展示地址也不代表共享同一个本地 base。
 - 本轮浏览器使用展示用远程地址，没有触发远程同步；地址读取本身不修改 Git 配置或工作目录。
 - P12 实际 Worktree 移除仍为后续阶段，本轮仅改善归属展示。
+
+## 11. 自动发布与一键安装验证、中英文说明
+
+2026-10-22，根据用户要求核对线上 Release、一键安装以及当前源码发布包，并补齐中英文 README。检查时的源码基线为 `8640464`，安装脚本、工作流和文档的增量身份见[验证记录](evidence/2026-10-22-install/verification.json)。
+
+### 11.1 线上实际发布状态
+
+- [Release 构建 35201438613](https://github.com/foxhello-ai/code-workspace/actions/runs/35201438613) 为成功，包含检查、构建、打包与发布步骤；对应 `361264d` / `v1.1.1`。
+- 最新公开 Release 仍是 [v1.1.1](https://github.com/foxhello-ai/code-workspace/releases/tag/v1.1.1)，具备版本包、latest 稳定名称包及两份 SHA-256 文件。
+- 工作流只监听 `v*` tag，推送 `main` 不触发构建发布。本轮 Git/Worktree 功能在 `main` 中，但尚未进入公开 Release；线上包登录后访问新增 Worktree API 返回 404，与其旧代码身份一致。
+
+### 11.2 安装与升级验收
+
+测试均使用可丢弃目录、独立配置/状态路径和空闲本地端口；没有替换用户现有安装或占用 `43110`。
+
+| 验收场景 | 结果 |
+|---|---|
+| 线上一条命令 | 实际执行 README 的公网 `curl .../main/scripts/install.sh \| bash` 下载路径，安装 `v1.1.1` 返回 0；发布包 SHA-256 校验通过。 |
+| 线上包服务 | 页面与 `/health` 正常；未登录 API 返回 401；随机密码可登录，配置权限为 `0600`；status/start/stop/restart 全部通过。 |
+| 原升级问题 | 隔离 fixture 从 `1.0.0` 升级 `1.0.1`，安装目录版本已是 `1.0.1`，运行服务仍返回 `1.0.0`。原因是只更新 `current` 链接，再执行 start 遇到已有 PID 即返回。 |
+| 升级修复 | 安装器在更新链接前调用原安装的 stop，再启动所选版本。回归验证升级后实际服务返回 `1.0.1`，重复安装和升级均保留配置及密码。 |
+| 校验失败 | 伪造的 SHA-256 被拒绝，未生成当前安装目录。 |
+| 当前源码生产包 | 使用实际打包脚本生成的归档安装，不运行 npm install；页面资源、认证、Git 历史及含远程地址的 Worktree API 均通过，包内存在 `README.en.md`。 |
+
+执行 `CODE_WORKSPACE_TEST_ARCHIVE=release/code-workspace-1.1.1.tar.gz node --test scripts/install.test.mjs`，3 项全部通过、0 跳过。发布流程已在创建 latest 别名和公开 Release 前加入同一检查。日志见[安装测试记录](evidence/2026-10-22-install/installer-tests.tap)。Shell/Node 语法与 `git diff --check` 通过；中英文 README 的 15 个配置键一致、本地文档链接存在。应用源码未变化，沿用第 10 节已通过的 39 项应用测试及生产构建。
+
+### 11.3 交付边界
+
+- 增加完整 [英文 README](../README.en.md)，中文 README 补充历史全屏、提交归属、地址/base/Worktree 层级、统计/详情、安装验证和发布触发规则；发布包同时包含两种语言说明。
+- 当前源码归档保留原 `1.1.1` 版本号，仅用于本地验证，未上传或覆盖公开版本。未创建新 tag 或 Release；线上 Latest 不应被视为已交付本轮功能。
+- 新增发布安装门禁已在本机 macOS / Node 22.22.0 / Git 2.40.0 执行成功；其 GitHub Actions/Linux 执行需下次正式标签发布验证。原线上工作流成功不能代替这一新增步骤的线上结果。

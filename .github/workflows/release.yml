@@ -39,6 +39,11 @@ jobs:
       - name: Build release archive
         run: npm run package:release
 
+      - name: Verify release installation and upgrades
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: CODE_WORKSPACE_TEST_ARCHIVE="release/code-workspace-${RELEASE_TAG#v}.tar.gz" node --test scripts/install.test.mjs
+
       - name: Create latest release aliases
         env:
           RELEASE_TAG: ${{ github.ref_name }}
