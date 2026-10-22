@@ -8,7 +8,7 @@ export default defineConfig({
   server: {
     port: 4312,
     proxy: {
-      "/api": { target: "http://127.0.0.1:4311", ws: true }
+      "/api": { target: "http://127.0.0.1:43110", ws: true }
     }
   }
 });
