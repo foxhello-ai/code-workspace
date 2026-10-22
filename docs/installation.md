@@ -46,7 +46,7 @@ code-workspace stop
 
 安装脚本会自动执行 `start`。运行日志位于 `~/.local/state/code-workspace/server.log`，进程号位于同目录的 `server.pid`。
 
-重新执行一条命令安装即可升级到最新 Release。旧版本会保留在 `~/.local/share/code-workspace/versions`，当前版本由 `current` 符号链接指向。
+重新执行一条命令安装即可升级到最新 Release。脚本会保留配置和密码，先停止原安装服务，再切换 `current` 并启动所选版本，确保运行中的进程加载新代码。升级会重启服务，请先保存编辑内容。旧版本会保留在 `~/.local/share/code-workspace/versions`，当前版本由 `current` 符号链接指向。
 
 ## 配置
 
@@ -75,4 +75,13 @@ git tag v1.1.1
 git push origin v1.1.1
 ```
 
-Release 包含 `code-workspace-<version>.tar.gz` 与对应的 SHA-256 文件。工作流文件位于 `.github/workflows/release.yml`。
+上面的 tag 命令仅用于演示流程。已发布的 tag 不应覆盖；发布新内容时先更新 `package.json` 和 `package-lock.json` 的版本，再创建新的对应 tag。推送 `main` 不触发 Release，一键安装取得的是最新已发布版本，可能落后于源码功能。
+
+Release 包含 `code-workspace-<version>.tar.gz`、稳定名称 `code-workspace-latest.tar.gz` 及各自的 SHA-256 文件；包内包含中英文 README。工作流文件位于 `.github/workflows/release.yml`。
+
+公开发布前，工作流还执行安装回归：首次/重复安装、升级后实际运行版本、配置与密码保留、错误校验和拒绝，以及真实生产包的页面资源、登录和 Git/Worktree API。可在本地复现：
+
+```bash
+npm run package:release
+CODE_WORKSPACE_TEST_ARCHIVE="release/code-workspace-$(node -p 'require("./package.json").version').tar.gz" node --test scripts/install.test.mjs
+```
