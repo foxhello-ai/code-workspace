@@ -7,6 +7,7 @@
 - 设计基线：文件树、Monaco 编辑、Git 历史、Git Diff、外部文件变化同步
 - 部署形态：本地或受信任内网中的单用户 Web 应用
 - 设计日期：2026-07-19
+- 扩展修订：2026-10-22；B-009/B-010 的实现设计见[第 21 节](#21-远程提交图与-worktree-设计扩展)。MVP 及 V1.1 内容保留其历史基线，阶段 A 已实现，阶段 B 的实际移除尚未实施。
 
 ## 2. 设计目标与边界
 
@@ -39,7 +40,7 @@
 - Codex 会话、聊天、任务、运行日志或终端。
 - xterm.js、PTY 服务或任意命令执行入口。
 - AI Commit、AI Diff 或 AI 审查。
-- Git Commit、Stage、Unstage、Discard、Push、Pull 等写操作；分支切换作为唯一纳入范围的受控 Git 写操作。
+- Git Commit、Stage、Unstage、Discard、Push、Pull 等写操作；V1.1 纳入受控分支切换。后续受控 fetch 及 worktree 移除的阶段边界见第 21 节，不表示当前已实现。
 - 调试器、插件系统、完整语言服务器、多用户协作。
 - 多工作区同时打开。
 
@@ -1006,7 +1007,7 @@ MVP 不要求接入外部监控平台，但日志格式应便于后续采集。
 
 - Linux、macOS。
 - Chrome、Edge 最新两个主要版本。
-- Git 2.30+。
+- Git 2.39+（本次隔离验证为 Git 2.40.0）。
 - 文件名包含空格、中文、emoji、前导短横线。
 - LF、CRLF、无末尾换行。
 
@@ -1109,3 +1110,64 @@ GET /api/git/graph?cursor=&limit=100
 - 分支切换命令禁用 shell，并仅在该写操作中允许 Git 获取索引锁。
 - 不提供强制切换、自动丢弃修改或自动 stash。
 - Commit Graph 和分支列表仍为只读查询。
+
+## 21. 远程提交图与 worktree 设计扩展
+
+### 21.1 需求与设计依据
+
+2026-10-22 补充 B-009/B-010，正式行为、阶段和验收以[需求第 11～16 节](change-request-subworkspace-git.md#11-2026-10-22-扩展需求基线)为准，任务对应[专项计划 P7～P12](subworkspace-git-development-plan.md#4-2026-10-22-扩展实施计划)。第 20 节全分支图是“本机已有 refs”的能力，不包含自动获取远程提交。
+
+### 21.2 身份与数据作用域
+
+- 仓库组 ID 基于规范化 Git common-dir，worktree ID 标识工作目录及其独立 Git 上下文。独立 clone 不因远程相同而合并；别名不重复计数。
+- fetch、refs/对象和登记清单属于共享仓库；HEAD、index、文件状态、working/staged Diff、文件树和分支切换属于指定 worktree。
+- 保留原 repositoryId 到工作目录的兼容映射，逐步增加 repositoryGroupId/worktreeId；不能把旧 ID 直接重新解释为共享组。
+- 主 worktree、默认分支、当前选中 worktree 是不同概念。状态失败返回未知，不以 0 参与清理判断；跨 worktree 汇总使用 `(worktreeId, path)`。
+
+### 21.3 同步、历史与缓存
+
+- 用户显式发起 fetch；后端使用登记远程和固定参数，按组去重，返回各远程状态。同步不执行 pull，不切分支、不改工作文件。
+- 图和列表统一全部/当前/指定分支范围；默认图包括本地/远程分支、Tag 及登记 worktree HEAD 可达提交，内部 stash/reflog 不默认混入。
+- refs 使用完整命名空间解析；图节点关联多个 refs/worktree HEAD。图页绑定 graphRevision，refs 变化重载首批，显示分页边界和加载状态。
+- 监听 common-dir、packed-refs、登记与 worktree HEAD/index 的必要元数据；同组失效广播不覆盖 session 自己的选择和文件缓冲。资源降级仍可手动刷新。
+
+### 21.4 关系图与后续移除
+
+- 阶段 A 实现仓库 → worktree 图、独立状态、提交联动和只读清理预览；未推送、未合并、文件修改分别展示。
+- 文件树删除/重命名 worktree 根目录需要受控保护，不能直接 `rm` 或移动目录绕过 Git 登记；普通 symlink 别名仍遵循原文件语义。
+- 阶段 B 单独实现 Git worktree 移除：明确确认、预览版本复验、保留分支、保护主项/未知/有内容等目标，不提供强制或自动清理。完整条件引用需求第 13.4 节。
+
+### 21.5 验证与修订记录
+
+- AC-GG-01～AC-GG-06、AC-WT-01～AC-WT-07、AC-INT-01 的定义见[统一验收矩阵](change-request-subworkspace-git.md#15-验收与追溯矩阵)；阶段 A/B 分别验收。
+- 2026-10-22：补充设计落点与现有基线的关系；本节为待实现设计，无功能完成或验收通过声明。
+
+### 21.6 实现落点与运行边界（2026-10-22）
+
+- `git-registry.ts` 规范化 common-dir/worktree 路径并解析 porcelain NUL 登记，主身份比较实际 git-dir 与 common-dir；`workspace-service.ts` 串行刷新登记、保留别名映射和原 repositoryId。
+- `repository-tasks.ts` 在服务内按组共用 fetch 任务。heads 使用固定全量 refspec 并 prune 远程跟踪分支，tags 单独无 prune 同步；网络命令禁用交互提示，返回脱敏错误，成功时间只保存在进程内。
+- `git-service.ts` 按 heads/remotes/tags/登记 HEAD 构建提交可达集合。图和列表共用版本化页，版本由 refs、登记 HEAD、范围和浅仓库标记计算；续页不匹配返回 `409 GRAPH_CHANGED`。根提交对空树、merge 对第一父提交。
+- `worktree-service.ts` 最多并发 4 项、总览默认查询 40 项；每项有总查询时间预算。登记默认 200 项，超限不宣称全范围完整；不可查询项保留未知状态。默认分支只来自已知远程 HEAD，不猜测 main/master。
+- `watch-service.ts` 保留工作区源码监听，另仅监听 Git 元数据；初始必要元数据超过 5000 项时降级。后台刷新与前台请求不互相覆盖登记快照，关闭工作区释放监听。
+- `GitPanels.tsx` 实现原生 SVG 提交图、组到 worktree 关系图、筛选、双向导航及清理预览。`App.tsx` 的全部 Diff 打开每个可预览文件；图片带 session；`DiffViewer.tsx` 确保先销毁 Monaco widget 再回收模型。
+- 新接口为 `GET /api/git/worktrees`、`GET /api/git/refs`、`GET /api/git/sync`、`POST /api/git/fetch`、`POST /api/git/editor-state`、`POST /api/git/worktrees/:id/removal-preview`；历史参数支持 `scope/ref/graphRevision` 和组/worktree 身份，原 repositoryId 继续有效。阶段 A 无 worktree DELETE 接口。
+- 预览返回 token、保留分支、忽略内容/未保存/会话占用及逐项阻止原因；当前选择、主项、越界、dirty、locked/prunable、未知和无引用保留的 detached 提交均阻止。浏览器每 15 秒报告缓冲状态，会话有效期 45 秒，不包含编辑内容。
+
+R3：阶段 A 已实现，实际检查与浏览器证据见验收报告第 8 节。上述运行限制不替代阶段 B 的执行前复验要求。
+
+
+### 21.7 验证反馈界面与提交比较（R4）
+
+- `GitGraphCommit.inCurrentHistory/inRemoteHistory` 分别表示是否被当前 worktree HEAD、全部已取得远程跟踪引用的任一 tip 包含，按解析后的 hash 执行祖先可达查询，不依据装饰或作者判断；无远程引用/查询失败使用 null。`GitHistoryPage.comparison` 返回 upstream 完整引用和领先/落后数，缺少 upstream 时为 null。
+- graphRevision 始终绑定当前 HEAD 和 upstream，以免在同组切换 worktree 后沿用不同本地比较口径的旧页。比较查询遵守 Git 时间和输出上限，失败保留历史并显示未知；浅仓库明确限定为已知历史。
+- `HistoryPanel` 在同一组件内切换固定全屏布局，保留范围、已加载页和所选提交；按钮或 Esc 退出，打开 Diff 返回编辑区。图与列表共享 HEAD 强调和提交归属标签；未加载的本地 HEAD 可通过当前分支范围定位。
+- `WorktreePanel` 从已去重的登记项计算全局总数及修改/干净/未知数量；筛选不改变统计。扁平列表保留共享仓库关联并跨组按修改、干净、未知排序，主项清单可展开；默认不渲染详情栏，选中后才展开可关闭详情及原有操作。
+- 追溯：GG-07/08、WT-09/10 → P13 → AC-GG-07/08、AC-WT-08。验收证据见验收报告第 9 节。
+
+
+### 21.8 Worktree Git 地址分类（R5）
+
+- `WorktreeOverview.groups[].remote` 返回 `GitRemoteAddresses`：`primaryName/primaryUrl/remotes/error`，其中各远程包含 fetchUrls 和 pushUrls。`git-remotes.ts` 只读 NUL 分隔的 remote URL 配置，保留多地址及含点远程名，移除 URL authority 凭证、query 和 fragment；未显式配置 push URL 时显示 fetch 地址作为默认 push 目标。配置无匹配与读取错误分别处理，不让地址失败破坏独立文件状态。
+- 主分类地址优先 origin 的首个 fetch URL，无 origin 时按远程名选首个有效项。展示的是配置地址，不执行网络查询，也不解析 insteadOf 重写来猜测托管平台身份。相同脱敏展示地址可归入同一 UI 分类；不同协议/别名不自动合并。相对本地路径解析到对应 repositoryRoot 下的绝对位置。
+- `GitPanels.tsx` 保留所有 common-dir base 及原 worktree ID，在地址分类下分别显示 base 名与 common-dir；同远程的独立 clone 不共享同步、清理或文件操作作用域。未配置/读取失败的 base 各自列出。
+- 排序先保证地址和 base 的归属连续，再按各组最高文件状态优先级排列，base 内采用修改、干净、未知顺序。筛选不改变全局计数；隐藏没有匹配项的分类。详情按所选 worktree 的所属 base 展示其全部地址。
