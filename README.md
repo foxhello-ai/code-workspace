@@ -1,5 +1,7 @@
 # Code Workspace
 
+简体中文 | [English](README.en.md)
+
 一个本地优先的轻量代码工作区，提供文件树、Monaco 编辑、Git 状态与历史、Git Diff，以及外部文件变化同步。
 
 它不会启动终端、Codex 会话或 AI 服务。外部工具只作为工作区文件的修改者存在。
@@ -61,6 +63,19 @@ curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scr
 
 安装完成后访问 `http://127.0.0.1:43110`。完整的前置条件、升级、配置与服务管理说明见 [安装文档](docs/installation.md)。
 
+发布包已包含编译产物和生产依赖；本机仍需要 Node.js 22+、Git 2.39+、`curl`、`tar` 和 SHA-256 校验工具。安装命令取得的是 **Latest Release**，不是 `main` 分支的源码快照。发布工作流仅在推送与 `package.json` 版本一致的 `v*` 标签时触发；推送 `main` 不会自动更新安装包。
+
+安装后可检查服务：
+
+```bash
+~/.local/bin/code-workspace status
+curl -fsS http://127.0.0.1:43110/health
+```
+
+健康检查应返回 `{"ok":true}`。访问密码由安装脚本随机生成，保存在 `~/.config/code-workspace/config.env`。
+
+重新执行安装命令会保留配置和密码，停止原安装服务后启动所选版本；旧版本目录保留。升级会重启服务，请先保存编辑内容。
+
 ### PM2 持久运行
 
 ```bash
@@ -80,6 +95,29 @@ npx pm2 status
 
 PM2 配置位于 `ecosystem.config.cjs`，服务异常退出后会自动重启，并固定监听 `0.0.0.0:43110`。
 
+## Git 与 Worktree 更新
+
+### 完整提交历史与本地、远程差异
+
+1. 进入 **Git 历史**，点击 **同步远程**，获取各已配置远程的新分支和提交。普通刷新只重读本地快照。
+2. 在提交图或列表中选择 **全部 / 当前 worktree / 指定引用**，按需加载更多提交；切换查看范围无需 checkout。
+3. 点击全屏按钮扩大历史视图，按 `Esc` 或退出按钮返回；范围、已加载记录和选中项保留。
+4. 根据醒目的 **本地 HEAD**、本地/远程提交归属和 upstream 领先/落后数量，确认本地与远程的差别。选中提交可查看文件列表并打开逐文件或全部 Diff。
+
+所有远程指标只代表已获取的本地引用；未配置 upstream、浅仓库和查询失败会保留未知状态。同步结果仅保存在服务进程内，重启后显示尚未同步。
+
+### 按 Git 地址查看 Worktree 归属
+
+- 顶部汇总全部 Worktree 的数量，以及修改、干净、未知数量；筛选不改变全局统计。
+- 按 **Git 远程地址 → 本地 base（common-dir）→ Worktree** 分组，直接展示地址和各 base 的路径。同一地址的独立 clone 保留各自主工作区，关联 Worktree 列在所属 base 下。
+- 主地址优先使用 `origin` 的首个 fetch URL；其他 fetch/push 地址可展开查看。URL 凭证不显示，未配置远程或读取失败分别提示。
+- 分类及 base 修改优先，base 内按 **修改 → 干净 → 未知** 排序；紧凑行展示分支、文件状态及未发布提交数，点击后才打开详情。
+- **主工作区** 和 **当前项** 有独立标识；详情可定位提交图、查看独立修改或打开只读清理预览。
+
+“文件干净”与“提交已发布”分别展示。当前只提供清理预览和 Worktree 根目录保护，实际移除仍为后续阶段；不同 SSH/HTTPS 地址写法不会自动合并为同一远程。
+
+界面示例：[全屏历史](docs/evidence/2026-10-22-git-ui/history-fullscreen.jpg)、[Git 地址分组](docs/evidence/2026-10-22-git-address/address-groups.jpg)。
+
 ## 验证
 
 ```bash
@@ -87,6 +125,15 @@ npm run check
 ```
 
 该命令依次执行类型检查、自动化测试和生产构建。
+
+发布安装验证（首次安装、重复安装、升级后实际运行版本、校验失败及生产包登录/Git API）可执行：
+
+```bash
+npm run package:release
+CODE_WORKSPACE_TEST_ARCHIVE="release/code-workspace-$(node -p 'require("./package.json").version').tar.gz" node --test scripts/install.test.mjs
+```
+
+同一检查已接入 Release 工作流，在公开发布安装包之前执行。
 
 ## 配置
 
@@ -129,10 +176,8 @@ npm run check
 
 设计与实施资料见 [docs/detailed-design.md](docs/detailed-design.md)、[docs/task-plan.md](docs/task-plan.md)、[docs/acceptance-report.md](docs/acceptance-report.md) 和 [docs/backlog.md](docs/backlog.md)。
 
-B-009 与 B-010 阶段 A 已实现，需求与追溯见[子工作区 Git 需求](docs/change-request-subworkspace-git.md#11-2026-10-22-扩展需求基线)、[专项计划 P7～P11](docs/subworkspace-git-development-plan.md#4-2026-10-22-扩展实施计划)及[本次验收](docs/acceptance-report.md#8-远程提交图与-worktree-扩展验收)。P12 的实际 worktree 移除按计划单列后续阶段，当前仅提供只读预览。
+B-009 与 B-010 阶段 A、P13/P14 的界面优化已实现，需求与追溯见[子工作区 Git 需求](docs/change-request-subworkspace-git.md#11-2026-10-22-扩展需求基线)、[专项计划](docs/subworkspace-git-development-plan.md#4-2026-10-22-扩展实施计划)及[验收报告第 8～10 节](docs/acceptance-report.md#8-远程提交图与-worktree-扩展验收)。
 
-进入“Git 历史”点击“同步远程”取得新提交，切换历史范围无需 checkout。点击“Worktree 关系图”可查看各目录状态、过滤干净/有修改项、定位提交和检查清理条件。“文件干净”与“提交已发布”分别展示；所有远程指标只代表已获取的本地引用。未配置 upstream、默认分支未知、浅仓库和查询失败均有明确提示。
-
-同步结果仅保存在服务进程内；重启后显示尚未同步。Git 元数据监听仅覆盖必要的 refs、登记、HEAD/index，初始超过 5000 项时明确降级为手动刷新；不监听其他 worktree 的全部源码。清理预览的活跃会话信息来自浏览器 15 秒心跳（45 秒有效），无法判断外部程序占用。
+Git 元数据监听仅覆盖必要的 refs、登记、HEAD/index，初始超过 5000 项时明确降级为手动刷新；不监听其他 Worktree 的全部源码。清理预览的活跃会话信息来自浏览器 15 秒心跳（45 秒有效），无法判断外部程序占用。
 
 本地浏览器验收样例可用 `node scripts/create-git-acceptance-fixture.mjs` 创建，脚本只建立临时 bare remote、两个 clone、关联 worktree 和 200 条以上历史，输出可打开的工作区路径。
