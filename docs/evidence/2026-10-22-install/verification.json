@@ -1,0 +1,55 @@
+{
+  "date": "2026-10-22T16:12:35.198708+08:00",
+  "sourceBaseline": "8640464bed78816cd12aad85b813d9f96a791f3e",
+  "sourceSha256": {
+    "scripts/install.sh": "457b98eb19d5bdd172af1d17105e559ca91561b09e8a0f146ce7bea624e7a11d",
+    "scripts/install.test.mjs": "c581efb079e116618c08f10eea4893e236135dd67cdf27b7a3aa37bf77c56728",
+    "scripts/package-release.mjs": "53853f4f0cb84afc906ff05256603846b88c3ef10ff8bc2747d6182f3a7641b5",
+    ".github/workflows/release.yml": "d9a94b37b4b80bcdf0bd8e20e20e47556fe082120f6e8c07465dfe27bdbf0010",
+    "README.md": "b917014e0f3c22ce2dae30a1f4b1cce266cefa57f687e7710984841cd1e550e0",
+    "README.en.md": "6f1770eb3c45c2d93df21d2014b44458b176603b256ea15f7d7a393e2c99abcb",
+    "docs/installation.md": "02d46fa3d36cafb15c3430db46a3082ccd29ba428d49143469eae1fbf7b892f3"
+  },
+  "publicRelease": {
+    "tag": "v1.1.1",
+    "commit": "361264d3e7aa17e83b604773cc4ae6454318db90",
+    "workflow": "https://github.com/foxhello-ai/code-workspace/actions/runs/35201438613",
+    "conclusion": "success",
+    "archiveSha256": "0452387022b3c6c413d4b01c1c6916dac691b859adb91f73e4dfa339ce38e611",
+    "installation": {
+      "version": "1.1.1",
+      "releaseCommit": "361264d3e7aa17e83b604773cc4ae6454318db90",
+      "checks": {
+        "health": "passed",
+        "web": "passed",
+        "unauthenticatedApi": "401 as expected",
+        "randomPasswordAndPermissions": "passed; 0600",
+        "login": "passed",
+        "newWorktreeApi": 404,
+        "lifecycle": "status / restart / stop / start passed"
+      }
+    }
+  },
+  "upgradeRegression": {
+    "beforeFix": "current points to 1.0.1 but live health still reports 1.0.0",
+    "afterFix": "fresh install, repeat install and upgrade report the expected live version; config and password preserved"
+  },
+  "localArchive": {
+    "path": "release/code-workspace-1.1.1.tar.gz",
+    "sha256": "42bb947a1cb17059babba1b3ca7fb486ef0bb562e4d5aa0b30e9079abe059aa0",
+    "identity": "unpublished current-source verification artifact; original package version retained",
+    "englishReadmeIncluded": true
+  },
+  "checks": {
+    "installerTests": "3 passed / 0 failed / 0 skipped, including production archive",
+    "lifecycle": "start / status / restart / stop passed",
+    "shellAndNodeSyntax": "passed",
+    "documentation": "15 configuration keys match; relative link targets exist",
+    "appTests": "reused accepted 39 application tests; application source unchanged"
+  },
+  "limitations": [
+    "Only v* tags trigger public release; main Git/Worktree changes remain unpublished.",
+    "The new installation gate passed locally on macOS; its GitHub Actions/Linux run awaits the next release tag.",
+    "The installer fix is in the working tree at this verification point; it has not been deployed to the public install URL."
+  ]
+}
