@@ -8,6 +8,7 @@ import { EventHub } from "./event-hub.js";
 import { GitService } from "./git-service.js";
 
 export class WatchService {
+  private metadataWatcher: FSWatcher | null = null;
   private watcher: FSWatcher | null = null;
   private gitTimer: NodeJS.Timeout | null = null;
   private pending = new Map<string, NodeJS.Timeout>();
@@ -17,6 +18,32 @@ export class WatchService {
     await this.stop();
     const context = this.workspace.get();
     const root = context.info.rootPath;
+    const groups = context.info.repositoryGroups ?? [];
+    const roots = [...new Set(groups.map(g => g.commonDir))];
+    const ignoreMetadata = (candidate: string) => {
+      const base = roots.find(r => candidate === r || candidate.startsWith(`${r}${path.sep}`));
+      if (!base) return false;
+      const rel = path.relative(base, candidate).replaceAll("\\", "/");
+      return Boolean(rel) && !(/^(HEAD|index|packed-refs|shallow|config|refs)(\/|$)/.test(rel) || /^worktrees(\/[^/]+(\/(HEAD|index|gitdir|commondir|locked))?)?$/.test(rel));
+    };
+    let metadataCount = 0;
+    // Count only permitted metadata; exceeding the bound disables metadata watching explicitly.
+    const countMetadata = async (directory: string): Promise<void> => {
+      if (metadataCount > 5000) return;
+      for (const entry of await readdir(directory, { withFileTypes: true }).catch(() => [])) {
+        const absolute = path.join(directory, entry.name);
+        if (ignoreMetadata(absolute)) continue;
+        if (++metadataCount > 5000) return;
+        if (entry.isDirectory()) await countMetadata(absolute);
+      }
+    };
+    await Promise.all(roots.map(countMetadata));
+    if (metadataCount > 5000) this.hub.emit(context.info.id, { type: "watcher.metadataDisabled" });
+    else {
+      this.metadataWatcher = chokidar.watch(roots, { ignoreInitial: true, followSymlinks: false, ignored: ignoreMetadata });
+      this.metadataWatcher.on("all", () => this.scheduleGit());
+      this.metadataWatcher.on("error", () => this.hub.emit(context.info.id, { type: "watcher.metadataError" }));
+    }
     const watchableEntries = await this.countWatchableEntries(root);
     if (watchableEntries > config.watchMaxFiles) {
       this.hub.emit(context.info.id, { type: "watcher.disabled", version: String(watchableEntries) });
@@ -57,6 +84,7 @@ export class WatchService {
       try {
         const context = this.workspace.get();
         if (!context.info.git) return;
+        await this.workspace.refreshGitInfo();
         const snapshot = await this.git.status(true);
         this.hub.emit(context.info.id, { type: "git.statusChanged", revision: snapshot.revision });
       } catch { /* file editing remains available */ }
@@ -66,8 +94,7 @@ export class WatchService {
   private ignored(root: string, candidate: string) {
     const rel = path.relative(root, candidate).replaceAll("\\", "/");
     if (!rel) return false;
-    if (rel === ".git") return false;
-    if (rel.startsWith(".git/")) return !(/^\.git\/(HEAD|index|refs\/)/.test(rel));
+    if (rel === ".git" || rel.startsWith(".git/")) return true;
     return /(^|\/)(\.git|node_modules|target|dist|build|coverage|\.gradle|\.idea|\.cursor)(\/|$)/.test(rel) || /(~|\.swp|\.tmp)$/.test(rel);
   }
 
@@ -95,6 +122,8 @@ export class WatchService {
   }
 
   async stop() {
+    if (this.metadataWatcher) await this.metadataWatcher.close();
+    this.metadataWatcher = null;
     if (this.watcher) await this.watcher.close();
     this.watcher = null;
     if (this.gitTimer) clearTimeout(this.gitTimer);

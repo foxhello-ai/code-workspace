@@ -4,8 +4,12 @@ export type DiffScope = "working" | "staged" | "all" | "commit";
 
 export interface GitRepositoryInfo {
   id: string;
+  repositoryGroupId: string;
+  worktreeId: string;
+  commonDir: string;
   name: string;
   workspacePath: string;
+  workspacePaths?: string[];
   repositoryRoot: string;
   branch: string | null;
   head: string | null;
@@ -22,6 +26,7 @@ export interface WorkspaceInfo {
   openedAt: string;
   git: null | GitRepositoryInfo;
   repositories: GitRepositoryInfo[];
+  repositoryGroups?: GitRepositoryGroup[];
   repositoryDiscovery: { depth: number; maxDirs: number; timedOut: boolean; truncated: boolean; checkedDirs: number };
   changedRepositoryCount?: number;
   changedFileCount?: number;
@@ -109,7 +114,78 @@ export interface GitBranchInfo {
 }
 
 export interface GitGraphCommit extends GitCommitSummary {
-  decorations: Array<{ type: "head" | "local" | "remote" | "tag" | "other"; name: string }>;
+  decorations: Array<{ type: "head" | "local" | "remote" | "tag" | "worktree" | "other"; name: string; worktreeId?: string }>;
+  inCurrentHistory: boolean | null;
+  inRemoteHistory: boolean | null;
+}
+
+export type HistoryScope = "all" | "current" | "ref";
+export interface GitHistoryPage {
+  items: GitGraphCommit[];
+  nextCursor: number | null;
+  head: string | null;
+  graphRevision: string;
+  scope: HistoryScope;
+  total: number;
+  shallow: boolean;
+  comparison: { upstream: string | null; ahead: number | null; behind: number | null };
+}
+export interface RemoteSyncResult { name: string; success: boolean; finishedAt: string; lastSuccessAt?: string; error?: string }
+export interface GitFetchResult { repositoryGroupId: string; startedAt: string; finishedAt: string; remotes: RemoteSyncResult[] }
+export interface GitWorktree {
+  worktreeId: string;
+  repositoryGroupId: string;
+  repositoryId?: string;
+  path: string;
+  workspacePath?: string;
+  head: string | null;
+  branch: string | null;
+  main: boolean | null;
+  current: boolean;
+  inWorkspace: boolean;
+  missing: boolean;
+  bare: boolean;
+  locked?: string;
+  prunable?: string;
+  gitDir?: string;
+}
+export interface GitRepositoryGroup {
+  repositoryGroupId: string;
+  commonDir: string;
+  name: string;
+  worktrees: GitWorktree[];
+  truncated: boolean;
+  error?: string;
+}
+export interface WorktreeStatus extends GitWorktree {
+  readAt: string;
+  status: GitStatusSnapshot | null;
+  error?: string;
+  upstream: { ref: string; ahead: number; behind: number } | null;
+  unpublished: number | null;
+  defaultBranch: string | null;
+  defaultRelation: "equal" | "ancestor" | "descendant" | "diverged" | "unknown";
+  syncNote: string;
+}
+export interface WorktreeOverview {
+  groups: Array<Omit<GitRepositoryGroup, "worktrees"> & { worktrees: WorktreeStatus[]; changedFileCount: number; unknownCount: number; sync?: GitFetchResult; remote: GitRemoteAddresses }>;
+}
+export interface GitRemoteAddresses {
+  primaryName: string | null;
+  primaryUrl: string | null;
+  remotes: Array<{ name: string; fetchUrls: string[]; pushUrls: string[] }>;
+  error?: string;
+}
+export interface RemovalPreview {
+  worktree: WorktreeStatus;
+  token: string;
+  allowed: boolean;
+  reasons: string[];
+  warnings: string[];
+  ignoredCount: number | null;
+  unsavedCount: number;
+  otherSessionCount: number;
+  branchPreserved: string | null;
 }
 
 export interface GitCommitDetail extends GitCommitSummary {
