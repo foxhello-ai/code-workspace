@@ -1,0 +1,51 @@
+{
+  "date": "2026-10-22T12:09:00.087503+08:00",
+  "scope": "P14 / WT-11 / AC-WT-09",
+  "baseline": "361264d3e7aa17e83b604773cc4ae6454318db90",
+  "sourceSha256": {
+    "src/shared/contracts.ts": "283a4d94f616fb19375b1936372b36fe5480df7c326b8a176ea5dc7f2906cb37",
+    "src/server/services/git-remotes.ts": "253166b68f47e982aba594e08a6d8ad07fe1a83975460408ae18259bb5f2edda",
+    "src/server/services/worktree-service.ts": "12405c24850e26ab03ab707297c62cfcdf12b3d47a3857b52e15596306fecd82",
+    "src/server/git-extensions.test.ts": "7c78ac2620515a87b0140a92e333c72ad8267a251cf757ab95ed085cda3c971a",
+    "src/web/GitPanels.tsx": "21e335a817877340c2551be405abc7d0267bde2eb0b38879db90665e060bdfeb",
+    "src/web/GitPanels.test.tsx": "65a5bb8a057ea3e9c4b25c5fadf747a29df534291f13b93f62d6ce544b50e668",
+    "src/web/styles.css": "4960b4279d1864678c0a94060a661a4566a49952f2a6a06a5070148a9c98abc8"
+  },
+  "builtSha256": {
+    "dist/server/server/services/git-remotes.js": "a0cba5bd24f1441b69c313186d873f4c1011cca44151d69b14999fc6409fec66",
+    "dist/web/index.html": "3b79b05f726e4c6faacd783b1ce037425a377439ad289fa896825d937c2b360e"
+  },
+  "checks": {
+    "npm run check": "passed: typecheck, 6 test files / 39 tests, production build (41.50s)",
+    "browser": "passed on isolated production build at 127.0.0.1:43111; Git address grouping, independent common-dir bases, multiple fetch/push URLs, ordering, global counts, unknown filter, scoped details; no error console entries",
+    "live health": "passed after restart on 127.0.0.1:43110; GET /health {\"ok\":true}; GET / HTTP 200",
+    "git diff --check": "passed"
+  },
+  "browserFixture": {
+    "gitAddressCount": 2,
+    "baseCount": 3,
+    "worktreeCount": 5,
+    "states": {
+      "dirty": 2,
+      "clean": 2,
+      "unknown": 1
+    },
+    "sameAddressIndependentBases": [
+      "main",
+      "payment-independent"
+    ],
+    "screenshots": [
+      "overview.jpg",
+      "address-groups.jpg",
+      "other-addresses.jpg",
+      "base-detail.jpg",
+      "unknown-filter.jpg"
+    ]
+  },
+  "limitations": [
+    "Grouping uses sanitized configured addresses without resolving equivalent SSH/HTTPS forms.",
+    "Independent common-dir base identities and operation scopes remain separate.",
+    "Browser fixture remotes were for display only; no network sync was performed in this acceptance run.",
+    "P12 worktree removal remains out of scope."
+  ]
+}

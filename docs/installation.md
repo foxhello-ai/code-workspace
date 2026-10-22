@@ -5,7 +5,7 @@ Code Workspace 以本机 Web 服务形式运行，支持 macOS 和 Linux。发�
 ## 前置条件
 
 - Node.js 22 或更高版本
-- Git 2.30 或更高版本
+- Git 2.39 或更高版本（worktree 登记使用 `git worktree list --porcelain -z`）
 - `curl`、`tar`，以及 `sha256sum` 或 `shasum`
 
 服务默认仅监听 `127.0.0.1:43110`，不会暴露到局域网或互联网。

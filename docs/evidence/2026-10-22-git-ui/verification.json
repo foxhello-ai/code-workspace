@@ -1,0 +1,23 @@
+{
+  "date": "2026-10-22T11:34:10.428475+08:00",
+  "scope": "P13 / GG-07, GG-08, WT-09, WT-10",
+  "baseline": "361264d3e7aa17e83b604773cc4ae6454318db90",
+  "sourceSha256": {
+    "src/shared/contracts.ts": "1d18abfc10b3618d369bcc48b1e5f28957434abe8f568b5f3301e74aa832c590",
+    "src/server/services/git-service.ts": "8a80e8b6272567ed987c2e8a47f0b10159d06a07b65e30dcd9b57ab84f202a34",
+    "src/server/git-extensions.test.ts": "b92e4a412189d649f1840063f4d24c5d058c45615a15eee375ac0d9263fbe8f4",
+    "src/web/GitPanels.tsx": "68dec5e070a0a71286c0395d51a7bd592d3cbaa473fae548dbb76fc4fe239ab5",
+    "src/web/GitPanels.test.tsx": "5d4db4284a3d7928a6ad6d92ed6895d6a24f857c5d7484f6e0d0d82fd5526361",
+    "src/web/styles.css": "1fc842e0f09f6f002afcc0e9f0fcc0336e073a4b3d34f722b6a1a8887dd9a242"
+  },
+  "checks": {
+    "npm run check": "passed, 6 files / 36 tests",
+    "npm run build": "passed after final CSS adjustment",
+    "browser": "passed on isolated production build; fullscreen, pagination, HEAD, graph/list, multi-file diff, worktree counts/sort/filter/details/main list",
+    "live health": "passed on 127.0.0.1:43110"
+  },
+  "limitations": [
+    "Remote ancestry is based on fetched local refs and known shallow history.",
+    "P12 worktree removal remains out of scope."
+  ]
+}
