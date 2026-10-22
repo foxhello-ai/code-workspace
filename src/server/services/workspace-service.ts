@@ -5,6 +5,7 @@ import type { GitRepositoryInfo, WorkspaceInfo } from "../../shared/contracts.js
 import { config } from "../config.js";
 import { AppError } from "../errors.js";
 import { GitRunner } from "../infrastructure/git-runner.js";
+import { gitIdentity, readRegistry } from "./git-registry.js";
 import { PathGuard } from "../security/path-guard.js";
 
 export interface WorkspaceContext { info: WorkspaceInfo; guard: PathGuard; gitRunners: Map<string, GitRunner> }
@@ -12,6 +13,7 @@ export interface WorkspaceContext { info: WorkspaceInfo; guard: PathGuard; gitRu
 const ignoredDiscoveryDirs = new Set([".git", "node_modules", "target", "dist", "build", "coverage", ".gradle", ".idea", ".cursor"]);
 
 export class WorkspaceService {
+  private registryQueue: Promise<unknown> = Promise.resolve();
   private current: WorkspaceContext | null = null;
   onChange?: (context: WorkspaceContext | null) => Promise<void> | void;
 
@@ -31,6 +33,7 @@ export class WorkspaceService {
       guard,
       gitRunners: new Map(repositories.map((repository) => [repository.id, new GitRunner(repository.repositoryRoot)]))
     };
+    await this.refreshGroups();
     await this.onChange?.(this.current);
     return this.current.info;
   }
@@ -44,6 +47,48 @@ export class WorkspaceService {
     const runner = context.gitRunners.get(repository.id);
     if (!runner) throw new AppError(503, "GIT_UNAVAILABLE", "Git 项目不可用");
     return { context, repository, runner };
+  }
+
+  refreshGroups() {
+    const task = this.registryQueue.catch(() => undefined).then(() => this.readGroups());
+    this.registryQueue = task;
+    return task;
+  }
+
+  private async readGroups() {
+    const context = this.get();
+    const representatives: GitRepositoryInfo[] = [];
+    for (const groupId of new Set(context.info.repositories.map(r => r.repositoryGroupId))) {
+      const candidates = context.info.repositories.filter(r => r.repositoryGroupId === groupId);
+      let representative = candidates[0];
+      for (const candidate of candidates) if (await stat(candidate.repositoryRoot).then(s => s.isDirectory()).catch(() => false)) { representative = candidate; break; }
+      representatives.push(representative);
+    }
+    const groups = await Promise.all(representatives.map(r => readRegistry(r, context.info.rootPath, context.info.repositories)));
+    context.info = { ...context.info, repositoryGroups: groups };
+    for (const group of groups) for (const worktree of group.worktrees) {
+      if (!worktree.inWorkspace || worktree.missing || worktree.bare || worktree.repositoryId) continue;
+      const repository = await this.probeRepository(context.info.rootPath, worktree.path, worktree.workspacePath ?? "", 0);
+      if (repository && repository.repositoryGroupId === group.repositoryGroupId) {
+        context.info.repositories.push(repository);
+        context.gitRunners.set(repository.id, new GitRunner(repository.repositoryRoot));
+        worktree.repositoryId = repository.id;
+      }
+    }
+    const registered = new Set(groups.flatMap(g => g.worktrees.map(w => w.worktreeId)));
+    context.info.repositories = context.info.repositories.filter(r => registered.has(r.worktreeId) || context.info.repositoryGroups?.find(g => g.repositoryGroupId === r.repositoryGroupId)?.error || context.info.repositoryGroups?.find(g => g.repositoryGroupId === r.repositoryGroupId)?.truncated);
+    context.info.git = context.info.repositories.find(r => r.id === context.info.git?.id) ?? context.info.repositories[0] ?? null;
+    return groups;
+  }
+
+  getGroup(groupId?: string) {
+    const context = this.get();
+    const id = groupId ?? context.info.git?.repositoryGroupId;
+    const group = context.info.repositoryGroups?.find(g => g.repositoryGroupId === id);
+    if (!group) throw new AppError(404, "GIT_GROUP_NOT_FOUND", "当前工作区中未发现该共享仓库");
+    const repository = context.info.repositories.find(r => r.repositoryGroupId === group.repositoryGroupId);
+    if (!repository) throw new AppError(404, "GIT_GROUP_NOT_FOUND", "共享仓库无可用工作目录");
+    return { group, ...this.getRepository(repository.id) };
   }
 
   repositories() { return this.get().info.repositories; }
@@ -65,14 +110,15 @@ export class WorkspaceService {
     const repositories = await Promise.all(context.info.repositories.map(async (repository) => {
       const runner = context.gitRunners.get(repository.id);
       if (!runner) return repository;
-      return this.refreshRepository(repository, runner);
+      return this.refreshRepository(repository, runner).catch(() => repository);
     }));
     const currentId = context.info.git?.id;
     context.info = {
       ...context.info,
-      repositories: repositories.map((repository) => ({ ...repository, current: repository.id === currentId })),
-      git: repositories.find((repository) => repository.id === currentId) ?? repositories[0] ?? null
+      repositories: context.info.repositories.map((repository) => ({ ...(repositories.find(r => r.id === repository.id) ?? repository), current: repository.id === currentId })),
+      git: repositories.find((repository) => repository.id === currentId) ?? context.info.repositories[0] ?? null
     };
+    await this.refreshGroups();
     return context.info;
   }
 
@@ -93,9 +139,13 @@ export class WorkspaceService {
       const candidate = queue.shift()!;
       checkedDirs++;
       const repository = await this.probeRepository(root, candidate.absolute, candidate.workspacePath, candidate.depth);
-      if (repository && !seenRepos.has(repository.repositoryRoot)) {
-        seenRepos.add(repository.repositoryRoot);
-        repositories.push(repository);
+      if (repository) {
+        if (!seenRepos.has(repository.repositoryRoot)) {
+          seenRepos.add(repository.repositoryRoot); repositories.push(repository);
+        } else {
+          const existing = repositories.find(r => r.repositoryRoot === repository.repositoryRoot)!;
+          existing.workspacePaths = [...new Set([...(existing.workspacePaths ?? [existing.workspacePath]), candidate.workspacePath])];
+        }
         continue;
       }
       if (candidate.depth >= depth) continue;
@@ -128,7 +178,7 @@ export class WorkspaceService {
     const head = (await runner.text(["rev-parse", "--verify", "HEAD"], { allowFailure: true })).trim() || null;
     const logicalPath = workspacePath || "";
     const name = logicalPath ? path.basename(logicalPath) : path.basename(root);
-    return { id: createHash("sha256").update(repoRootReal).digest("hex").slice(0, 16), name, workspacePath: logicalPath, repositoryRoot: repoRootReal, branch, head, detached: !branch && Boolean(head), current: false, discoveryDepth };
+    return { ...await gitIdentity(repoRootReal), id: createHash("sha256").update(repoRootReal).digest("hex").slice(0, 16), name, workspacePath: logicalPath, repositoryRoot: repoRootReal, branch, head, detached: !branch && Boolean(head), current: false, discoveryDepth };
   }
 
   private async refreshRepository(repository: GitRepositoryInfo, runner: GitRunner) {

@@ -1,9 +1,10 @@
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
-import { chmod, lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, realpath, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import type { FileContent, FileTreeEntry, GitState } from "../../shared/contracts.js";
 import { config } from "../config.js";
 import { AppError } from "../errors.js";
+import { inside } from "./git-registry.js";
 import { WorkspaceService } from "./workspace-service.js";
 
 const languageMap: Record<string, string> = { ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript", json: "json", md: "markdown", css: "css", html: "html", py: "python", sh: "shell", yml: "yaml", yaml: "yaml", sql: "sql", rs: "rust", go: "go" };
@@ -96,8 +97,20 @@ export class FileService {
     await mkdir(absolute);
   }
 
+  private async protectWorktree(relative: string) {
+    const context = this.workspace.get();
+    const logical = context.guard.resolveLogical(relative);
+    // A plain symlink alias can be unlinked/renamed without touching its target.
+    if ((await lstat(logical.absolute)).isSymbolicLink()) return;
+    const actual = await realpath(logical.absolute);
+    const groups = await this.workspace.refreshGroups();
+    const roots = [...context.info.repositories.map(r => r.repositoryRoot), ...groups.flatMap(g => g.worktrees.map(w => w.path))];
+    if (roots.some(root => inside(actual, root))) throw new AppError(409, "WORKTREE_ROOT_PROTECTED", "此目录包含 Git worktree 根目录，请使用 worktree 清理预览和专用移除流程");
+  }
+
   async move(from: string, to: string) {
     await this.workspace.get().guard.resolveExisting(from);
+    await this.protectWorktree(from);
     const source = this.workspace.get().guard.resolveLogical(from);
     const target = await this.workspace.get().guard.resolveNew(to);
     if (await stat(target.absolute).then(() => true).catch(() => false)) throw new AppError(409, "PATH_EXISTS", "目标已经存在");
@@ -107,6 +120,7 @@ export class FileService {
   async remove(relative: string, recursive: boolean, confirmed: boolean) {
     if (!confirmed) throw new AppError(400, "CONFIRMATION_REQUIRED", "删除操作需要确认");
     await this.workspace.get().guard.resolveExisting(relative);
+    await this.protectWorktree(relative);
     const target = this.workspace.get().guard.resolveLogical(relative);
     await rm(target.absolute, { recursive, force: false });
   }

@@ -12,7 +12,7 @@ export class PathGuard {
     if (relative.includes("\0") || path.isAbsolute(relative)) throw new AppError(400, "INVALID_PATH", "路径必须是工作区内的相对路径");
     const normalized = relative.replaceAll("\\", "/").replace(/^\.\//, "");
     if (normalized.split("/").some((part) => part === "..")) throw new AppError(403, "PATH_OUTSIDE_WORKSPACE", "禁止访问工作区之外的路径");
-    if (normalized === ".git" || normalized.startsWith(".git/")) throw new AppError(403, "GIT_INTERNAL_PATH_DENIED", "禁止通过文件接口访问 .git");
+    if (normalized.split("/").includes(".git")) throw new AppError(403, "GIT_INTERNAL_PATH_DENIED", "禁止通过文件接口访问 .git");
     return normalized === "." ? "" : normalized;
   }
 

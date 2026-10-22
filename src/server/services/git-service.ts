@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { DiffDocument, DiffFile, DiffScope, GitBranchInfo, GitChangedFile, GitCommitDetail, GitCommitSummary, GitGraphCommit, GitState, GitStatusSnapshot } from "../../shared/contracts.js";
+import type { DiffDocument, DiffFile, DiffScope, GitBranchInfo, GitChangedFile, GitCommitDetail, GitCommitSummary, GitGraphCommit, GitState, GitStatusSnapshot, GitRepositoryInfo, GitHistoryPage, HistoryScope } from "../../shared/contracts.js";
 import { AppError } from "../errors.js";
 import { GitRunner } from "../infrastructure/git-runner.js";
 import { WorkspaceService } from "./workspace-service.js";
@@ -26,6 +26,10 @@ export class GitService {
 
   async status(force = false, repositoryId?: string): Promise<GitStatusSnapshot> {
     const { repository, runner } = this.context(repositoryId);
+    return this.statusAt(repository, runner, force);
+  }
+
+  async statusAt(repository: Pick<GitRepositoryInfo, "id">, runner: GitRunner, force = true): Promise<GitStatusSnapshot> {
     const cached = this.snapshots.get(repository.id);
     if (cached && !force) return cached;
     const raw = await runner.run(["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all"]);
@@ -93,6 +97,12 @@ export class GitService {
     return new Set(output.split("\0").filter(Boolean));
   }
 
+  async refs(repositoryId?: string) {
+    const { runner } = this.context(repositoryId);
+    const raw = await runner.text(["for-each-ref", "--format=%(refname)%00%(objectname)", "refs/heads", "refs/remotes", "refs/tags"]);
+    return raw.trimEnd().split("\n").filter(Boolean).map(line => { const [fullName, target] = line.split("\0"); return { fullName, target, name: fullName.replace(/^refs\/(heads|remotes|tags)\//, ""), kind: fullName.startsWith("refs/heads/") ? "本地" : fullName.startsWith("refs/remotes/") ? "远程" : "Tag" }; });
+  }
+
   async branches(repositoryId?: string) {
     const { runner } = this.context(repositoryId);
     const format = "%(refname)%00%(refname:short)%00%(objectname)%00%(HEAD)%00%(upstream:short)%00";
@@ -130,23 +140,64 @@ export class GitService {
     return { workspace, status };
   }
 
-  async graph(cursor = 0, limit = 100, repositoryId?: string) {
+  async graph(cursor = 0, limit = 100, repositoryId?: string, scope: HistoryScope = "all", ref?: string, revision?: string): Promise<GitHistoryPage> {
+    if (!["all", "current", "ref"].includes(scope)) throw new AppError(400, "INVALID_SCOPE", "历史范围无效");
+    if (!Number.isSafeInteger(cursor) || cursor < 0 || !Number.isFinite(limit)) throw new AppError(400, "INVALID_CURSOR", "分页参数无效");
     const { repository, runner } = this.context(repositoryId);
-    const skip = Math.max(0, cursor);
-    const bounded = Math.max(1, Math.min(limit, 200));
-    const format = "%H%x1f%h%x1f%P%x1f%s%x1f%an%x1f%ae%x1f%aI%x1f%cI%x1f%D%x1e";
-    const text = await runner.text(["log", "--all", "--topo-order", "--date-order", `--skip=${skip}`, `--max-count=${bounded}`, `--format=${format}`], { allowFailure: true, timeoutMs: 30_000 });
-    const items = text.split("\x1e").map((record) => record.trim()).filter(Boolean).map((record): GitGraphCommit => {
-      const [hash, shortHash, parents, subject, authorName, authorEmail, authoredAt, committedAt, decorationText = ""] = record.split("\x1f");
-      const decorations = decorationText.split(", ").map((item) => item.trim()).filter(Boolean).map((item) => {
-        if (item.startsWith("HEAD -> ")) return { type: "head" as const, name: item.slice(8) };
-        if (item.startsWith("tag: ")) return { type: "tag" as const, name: item.slice(5) };
-        if (item.startsWith("origin/") || item.includes("/")) return { type: "remote" as const, name: item };
-        return { type: "local" as const, name: item };
-      });
-      return { hash, shortHash, parents: parents ? parents.split(" ") : [], subject, authorName, authorEmail, authoredAt, committedAt, decorations };
+    const groups = await this.workspace.refreshGroups();
+    const group = groups.find(g => g.repositoryGroupId === repository.repositoryGroupId)!;
+    if (group.error || group.truncated) throw new AppError(503, "INCOMPLETE_REGISTRY", group.error ?? "worktree 登记超过数量限制，无法声明完整提交范围");
+    const raw = await runner.text(["for-each-ref", "--format=%(refname)%00%(objectname)%00%(*objectname)%00%(objecttype)%00%(*objecttype)", "refs/heads", "refs/remotes", "refs/tags"]);
+    const refs = raw.trimEnd().split("\n").filter(Boolean).map(line => {
+      const [fullName, object, peeled, type, peeledType] = line.split("\0");
+      return { fullName, hash: type === "commit" ? object : peeledType === "commit" ? peeled : null };
     });
-    return { items, nextCursor: items.length === bounded ? skip + bounded : null, head: (await this.status(false, repository.id)).head };
+    for (const entry of refs.filter(r => !r.hash && r.fullName.startsWith("refs/tags/"))) {
+      entry.hash = (await runner.text(["rev-parse", "--verify", `${entry.fullName}^{commit}`], { allowFailure: true })).trim() || null;
+    }
+    const head = (await runner.text(["rev-parse", "--verify", "HEAD"], { allowFailure: true })).trim() || null;
+    const upstream = head ? (await runner.text(["rev-parse", "--symbolic-full-name", "@{upstream}"], { allowFailure: true })).trim() || null : null;
+    const shallow = (await runner.text(["rev-parse", "--is-shallow-repository"])).trim() === "true";
+    const graphRevision = createHash("sha256").update(JSON.stringify({ raw, worktrees: group.worktrees.map(w => [w.worktreeId, w.head, w.branch]), head, upstream, scope, ref, shallow })).digest("hex");
+    if (cursor > 0 && revision !== graphRevision) throw new AppError(409, "GRAPH_CHANGED", "提交范围已变化，请从第一页重新加载", { graphRevision });
+    let roots: string[];
+    if (scope === "current") roots = head ? [head] : [];
+    else if (scope === "ref") {
+      const selected = refs.find(r => r.fullName === ref);
+      if (!selected?.hash) throw new AppError(404, "REF_NOT_FOUND", "请选择后端已知的提交引用");
+      roots = [selected.hash];
+    } else roots = [...refs.flatMap(r => r.hash ? [r.hash] : []), ...group.worktrees.flatMap(w => w.head ? [w.head] : [])];
+    roots = [...new Set(roots)];
+    const bounded = Math.max(1, Math.min(limit, 200));
+    const format = "%H%x1f%h%x1f%P%x1f%s%x1f%an%x1f%ae%x1f%aI%x1f%cI%x1e";
+    const remoteRoots = [...new Set(refs.filter(r => r.fullName.startsWith("refs/remotes/") && r.hash).map(r => r.hash!))];
+    const upstreamHash = refs.find(r => r.fullName === upstream)?.hash;
+    // Reachability uses the same resolved hashes as this page, including ancestors without ref decorations.
+    // If comparison fails, preserve history and mark the comparison unknown instead of inventing a local-only state.
+    const reachable = async (tips: string[]) => new Set((await runner.text(["rev-list", ...tips, "--"], { timeoutMs: 30_000 })).trim().split("\n").filter(Boolean));
+    const [text, count, localHistory, remoteHistory, divergence] = await Promise.all([
+      roots.length ?
+      runner.text(["log", "--topo-order", "--date-order", `--skip=${cursor}`, `--max-count=${bounded}`, `--format=${format}`, ...roots, "--"], { timeoutMs: 30_000 })
+      : Promise.resolve(""),
+      roots.length ? runner.text(["rev-list", "--count", ...roots, "--"], { timeoutMs: 30_000 }) : Promise.resolve("0"),
+      head ? reachable([head]).catch(() => null) : Promise.resolve(new Set<string>()),
+      remoteRoots.length ? reachable(remoteRoots).catch(() => null) : Promise.resolve(null),
+      head && upstreamHash ? runner.text(["rev-list", "--left-right", "--count", `${head}...${upstreamHash}`, "--"], { timeoutMs: 30_000 }).catch(() => "") : Promise.resolve("")
+    ]);
+    const items = text.split("\x1e").map(record => record.trim()).filter(Boolean).map((record): GitGraphCommit => {
+      const [hash, shortHash, parents, subject, authorName, authorEmail, authoredAt, committedAt] = record.split("\x1f");
+      const decorations: GitGraphCommit["decorations"] = refs.filter(r => r.hash === hash).map(r => ({
+        type: r.fullName.startsWith("refs/heads/") ? "local" : r.fullName.startsWith("refs/remotes/") ? "remote" : "tag",
+        name: r.fullName.replace(/^refs\/(heads|remotes|tags)\//, "")
+      }));
+      for (const worktree of group.worktrees.filter(w => w.head === hash)) decorations.push({ type: "worktree", name: `${worktree.main ? "主工作区" : "worktree"} · ${path.basename(worktree.path)}`, worktreeId: worktree.worktreeId });
+      if (head === hash) decorations.push({ type: "head", name: "HEAD" });
+      return { hash, shortHash, parents: parents ? parents.split(" ") : [], subject, authorName, authorEmail, authoredAt, committedAt, decorations, inCurrentHistory: localHistory?.has(hash) ?? null, inRemoteHistory: remoteHistory?.has(hash) ?? null };
+    });
+    const total = Number(count.trim());
+    const counts = divergence.trim() ? divergence.trim().split(/\s+/).map(Number) : [];
+    const comparison = { upstream, ahead: counts[0] ?? null, behind: counts[1] ?? null };
+    return { items, nextCursor: cursor + items.length < total ? cursor + items.length : null, head, graphRevision, scope, total, shallow, comparison };
   }
 
   async fileState(relative: string, repositoryId?: string): Promise<GitState> {
@@ -160,19 +211,8 @@ export class GitService {
     return code === "A" ? "added" : code === "D" ? "deleted" : code === "R" ? "renamed" : "modified";
   }
 
-  async history(cursor?: string, limit = 50, repositoryId?: string) {
-    const { repository, runner } = this.context(repositoryId);
-    const bounded = Math.max(1, Math.min(limit, 100));
-    if (cursor && !validHash.test(cursor)) throw new AppError(400, "INVALID_REVISION", "提交标识无效");
-    const format = "%H%x1f%h%x1f%P%x1f%s%x1f%an%x1f%ae%x1f%aI%x1f%cI%x1e";
-    const logArgs = ["log", `--max-count=${bounded}`, `--format=${format}`];
-    if (cursor) logArgs.push("--skip=1", cursor); else logArgs.push("HEAD");
-    const text = await runner.text(logArgs, { allowFailure: true, timeoutMs: 30_000 });
-    const commits = text.split("\x1e").map((r) => r.trim()).filter(Boolean).map((record): GitCommitSummary => {
-      const [hash, shortHash, parents, subject, authorName, authorEmail, authoredAt, committedAt] = record.split("\x1f");
-      return { hash, shortHash, parents: parents ? parents.split(" ") : [], subject, authorName, authorEmail, authoredAt, committedAt };
-    });
-    return { items: commits, nextCursor: commits.length === bounded ? commits.at(-1)!.hash : null, head: (await this.status(false, repository.id)).head };
+  async history(cursor?: string, limit = 50, repositoryId?: string, scope: HistoryScope = "all", ref?: string, revision?: string) {
+    return this.graph(Number(cursor ?? 0), limit, repositoryId, scope, ref, revision);
   }
 
   async commit(hash: string, repositoryId?: string): Promise<GitCommitDetail> {
@@ -180,9 +220,10 @@ export class GitService {
     const { runner } = this.context(repositoryId);
     const format = "%H%x1f%h%x1f%P%x1f%s%x1f%b%x1f%an%x1f%ae%x1f%aI%x1f%cn%x1f%ce%x1f%cI";
     const meta = (await runner.text(["show", "-s", `--format=${format}`, hash])).trim().split("\x1f");
-    const nameStatus = (await runner.run(["diff-tree", "--root", "--no-commit-id", "-r", "-M", "--name-status", "-z", hash])).toString("utf8").split("\0").filter(Boolean);
+    const base = meta[2]?.split(" ")[0] || EMPTY_TREE;
+    const nameStatus = (await runner.run(["diff", "-M", "--name-status", "-z", base, hash, "--"])).toString("utf8").split("\0").filter(Boolean);
     const files = this.parseNameStatus(nameStatus).map((f) => ({ path: f.path, oldPath: f.oldPath, status: f.status }));
-    const numstat = (await runner.text(["diff-tree", "--root", "--no-commit-id", "-r", "--numstat", hash])).trim().split("\n").filter(Boolean);
+    const numstat = (await runner.text(["diff", "--numstat", base, hash, "--"])).trim().split("\n").filter(Boolean);
     let additions = 0, deletions = 0;
     for (const line of numstat) { const [a, d] = line.split("\t"); if (a !== "-") additions += Number(a); if (d !== "-") deletions += Number(d); }
     return { hash: meta[0], shortHash: meta[1], parents: meta[2] ? meta[2].split(" ") : [], subject: meta[3], body: meta[4], authorName: meta[5], authorEmail: meta[6], authoredAt: meta[7], committerName: meta[8], committerEmail: meta[9], committedAt: meta[10], files, additions, deletions };
