@@ -44,13 +44,20 @@ jobs:
       - name: Install build dependencies
         run: npm ci
 
-      - name: Verify project
-        run: npm run check
+      - name: Typecheck and build production files
+        id: compile
+        run: npm run typecheck && npm run build
+
+      - name: Verify application
+        run: npm test
 
       - name: Build release archive with platform dependencies
+        id: package
+        if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
         run: node scripts/package-release.mjs
 
       - name: Verify installation, upgrades, and production Git APIs
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         shell: bash
         run: |
           version="$(node -p 'require("./package.json").version')"

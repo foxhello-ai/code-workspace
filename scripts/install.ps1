@@ -13,8 +13,9 @@ if ($architecture -ne 'AMD64') { throw 'The Windows release currently supports x
 $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
 if (-not $nodeCommand) { throw 'Node.js 22+ is required. Install it with: winget install --id OpenJS.NodeJS.LTS -e. Then reopen PowerShell.' }
 $nodeExecutable = $nodeCommand.Source
-$nodeMajor = & $nodeExecutable -p 'process.versions.node.split(".")[0]'
-if ($LASTEXITCODE -ne 0 -or [int]$nodeMajor -lt 22) { throw 'Node.js 22 or later is required.' }
+$nodeVersion = & $nodeExecutable --version
+if ($LASTEXITCODE -ne 0 -or $nodeVersion -notmatch '^v(\d+)\.') { throw 'Cannot determine the Node.js version.' }
+if ([int]$Matches[1] -lt 22) { throw 'Node.js 22 or later is required.' }
 $gitCommand = Get-Command git.exe -ErrorAction SilentlyContinue
 if (-not $gitCommand) { throw 'Git 2.39+ is required. Install it with: winget install --id Git.Git -e. Then reopen PowerShell.' }
 $gitVersion = & $gitCommand.Source --version

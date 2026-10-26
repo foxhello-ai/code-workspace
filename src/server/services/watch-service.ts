@@ -11,11 +11,14 @@ export class WatchService {
   private metadataWatcher: FSWatcher | null = null;
   private watcher: FSWatcher | null = null;
   private gitTimer: NodeJS.Timeout | null = null;
+  private gitRefresh: Promise<void> | null = null;
+  private stopped = true;
   private pending = new Map<string, NodeJS.Timeout>();
   constructor(private workspace: WorkspaceService, private git: GitService, private hub: EventHub) {}
 
   async start() {
     await this.stop();
+    this.stopped = false;
     const context = this.workspace.get();
     const root = context.info.rootPath;
     const groups = context.info.repositoryGroups ?? [];
@@ -56,6 +59,7 @@ export class WatchService {
       ignored: (candidate) => this.ignored(root, candidate)
     });
     const send = (type: string, absolute: string) => {
+      if (this.stopped) return;
       const rel = path.relative(root, absolute).replaceAll("\\", "/");
       if (!rel || rel.startsWith(".git/")) { this.scheduleGit(); return; }
       const key = `${type}:${rel}`;
@@ -78,16 +82,25 @@ export class WatchService {
   }
 
   private scheduleGit() {
+    if (this.stopped) return;
     if (this.gitTimer) clearTimeout(this.gitTimer);
-    this.gitTimer = setTimeout(async () => {
-      this.git.invalidate();
-      try {
-        const context = this.workspace.get();
-        if (!context.info.git) return;
-        await this.workspace.refreshGitInfo();
-        const snapshot = await this.git.status(true);
-        this.hub.emit(context.info.id, { type: "git.statusChanged", revision: snapshot.revision });
-      } catch { /* file editing remains available */ }
+    this.gitTimer = setTimeout(() => {
+      this.gitTimer = null;
+      if (this.stopped) return;
+      if (this.gitRefresh) { this.scheduleGit(); return; }
+      const refresh = (async () => {
+        this.git.invalidate();
+        try {
+          const context = this.workspace.get();
+          if (!context.info.git) return;
+          await this.workspace.refreshGitInfo();
+          if (this.stopped) return;
+          const snapshot = await this.git.status(true);
+          if (!this.stopped) this.hub.emit(context.info.id, { type: "git.statusChanged", revision: snapshot.revision });
+        } catch { /* file editing remains available */ }
+      })();
+      this.gitRefresh = refresh;
+      void refresh.finally(() => { if (this.gitRefresh === refresh) this.gitRefresh = null; });
     }, config.watchDebounceMs);
   }
 
@@ -122,13 +135,17 @@ export class WatchService {
   }
 
   async stop() {
-    if (this.metadataWatcher) await this.metadataWatcher.close();
-    this.metadataWatcher = null;
-    if (this.watcher) await this.watcher.close();
-    this.watcher = null;
+    this.stopped = true;
     if (this.gitTimer) clearTimeout(this.gitTimer);
     this.gitTimer = null;
     for (const timer of this.pending.values()) clearTimeout(timer);
     this.pending.clear();
+    if (this.metadataWatcher) await this.metadataWatcher.close();
+    this.metadataWatcher = null;
+    if (this.watcher) await this.watcher.close();
+    this.watcher = null;
+    // Git child processes hold their cwd open on Windows. Do not finish closing
+    // the workspace until the in-flight refresh has released those handles.
+    await this.gitRefresh;
   }
 }

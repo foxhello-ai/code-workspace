@@ -129,7 +129,7 @@ Windows 维护者验证（使用随系统提供的 Windows PowerShell 5.1 执行
 
 ```powershell
 npm.cmd run package:release
-$version = node -p 'require("./package.json").version'
+$version = node -p "require('./package.json').version"
 $env:CODE_WORKSPACE_TEST_ARCHIVE = "release/code-workspace-$version-windows-x64.zip"
 node --test scripts/install.test.mjs scripts/service-manager.test.mjs
 ```

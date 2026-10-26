@@ -1,10 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { buildApp } from "./app.js";
 import { config } from "./config.js";
+import { GitRunner } from "./infrastructure/git-runner.js";
 
 let root: string;
 let app: Awaited<ReturnType<typeof buildApp>>;
@@ -24,6 +25,29 @@ beforeEach(async () => {
 afterEach(async () => { await app.close(); await rm(root, { recursive: true, force: true }); });
 
 describe("workspace API", () => {
+  it("waits for a running watcher Git refresh before closing the workspace", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let blocked = false;
+    const original = GitRunner.prototype.run;
+    const spy = vi.spyOn(GitRunner.prototype, "run").mockImplementation(async function (this: GitRunner, args, options) {
+      const result = await original.call(this, args, options);
+      if (args[0] === "symbolic-ref") { blocked = true; await gate; }
+      return result;
+    });
+    try {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      await writeFile(path.join(root, "hello.txt"), "trigger watcher refresh\n");
+      await vi.waitFor(() => expect(blocked).toBe(true), { timeout: 5000 });
+      let closed = false;
+      const closing = app.inject({ method: "POST", url: "/api/workspace/close" }).then(response => { closed = true; return response; });
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(closed).toBe(false);
+      release();
+      expect((await closing).statusCode).toBe(200);
+    } finally { release(); spy.mockRestore(); }
+  });
+
   it("closes the current workspace without requiring a JSON body", async () => {
     const closed = await app.inject({ method: "POST", url: "/api/workspace/close" });
     expect(closed.statusCode).toBe(200);
@@ -96,6 +120,7 @@ describe("workspace API", () => {
       expect(depthTwo.json().data.repositories.map((repo: { workspacePath: string }) => repo.workspacePath)).toEqual(["repo-a", "services/repo-b"]);
     } finally {
       config.gitDiscoveryDepth = originalDepth;
+      await app.inject({ method: "POST", url: "/api/workspace/close" });
       await Promise.all([aggregate, repoA, repoB].map((item) => rm(item, { recursive: true, force: true })));
     }
   });
@@ -139,6 +164,7 @@ describe("workspace API", () => {
       expect((await app.inject({ method: "GET", url: "/api/workspace", headers: sessionA })).statusCode).toBe(404);
       expect((await app.inject({ method: "GET", url: "/api/workspace", headers: sessionB })).json().data.rootPath).toBe(await realpath(other));
     } finally {
+      await app.inject({ method: "POST", url: "/api/workspace/close", headers: { "x-code-workspace-session": "session-b" } });
       await rm(other, { recursive: true, force: true });
     }
   });
@@ -184,6 +210,7 @@ describe("workspace API", () => {
       expect(entries.find((entry) => entry.name === "repo-a")).toMatchObject({ gitTrackedState: "repository", repositoryChangedFileCount: 2 });
     } finally {
       config.gitDiscoveryDepth = originalDepth;
+      await app.inject({ method: "POST", url: "/api/workspace/close" });
       await rm(aggregate, { recursive: true, force: true });
     }
   });
