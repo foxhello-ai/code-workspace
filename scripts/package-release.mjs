@@ -55,14 +55,16 @@ const archiveTempDir = mkdtempSync(path.join(tmpdir(), "code-workspace-release-"
 const archiveTempPath = path.join(archiveTempDir, archiveName);
 try {
   console.log("Creating release archive...");
-  const archiveCommand = process.platform === "win32" ? path.join(process.env.SystemRoot || "C:\\Windows", "System32", "tar.exe") : "tar";
+  const archiveCommand = process.platform === "win32" ? "powershell.exe" : "tar";
   const archiveArgs = process.platform === "win32"
-    ? ["-a", "-cf", archiveTempPath, "-C", stagingDir, "code-workspace"]
+    ? ["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::CreateFromDirectory($env:CODE_WORKSPACE_PACKAGE_DIR, $env:CODE_WORKSPACE_ARCHIVE_PATH, [IO.Compression.CompressionLevel]::Optimal, $true)"]
     : ["-czf", archiveTempPath, "-C", stagingDir, "code-workspace"];
+  const archiveEnv = { ...process.env, LC_ALL: "C", LANG: "C", CODE_WORKSPACE_PACKAGE_DIR: packageDir, CODE_WORKSPACE_ARCHIVE_PATH: archiveTempPath };
+  if (process.platform === "win32") for (const key of Object.keys(archiveEnv)) if (key.toLowerCase() === "psmodulepath") delete archiveEnv[key];
   execFileSync(archiveCommand, archiveArgs, {
     cwd: root,
     stdio: "inherit",
-    env: { ...process.env, LC_ALL: "C", LANG: "C", CODE_WORKSPACE_PACKAGE_DIR: packageDir, CODE_WORKSPACE_ARCHIVE_PATH: archiveTempPath }
+    env: archiveEnv
   });
   copyFileSync(archiveTempPath, archivePath);
 } finally {

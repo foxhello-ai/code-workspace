@@ -38,9 +38,11 @@ function alive(serverProcessId) {
 function managed(state) {
   if (!state || !Number.isInteger(state.pid) || state.pid <= 0 || !/^[a-f0-9-]{36}$/.test(state.instance)) return false;
   if (!alive(state.pid)) return false;
+  const powershellEnv = { ...process.env, CODE_WORKSPACE_PROCESS_ID: String(state.pid) };
+  for (const key of Object.keys(powershellEnv)) if (key.toLowerCase() === "psmodulepath") delete powershellEnv[key];
   // Check the instance argument before stopping a process; a stale PID may have been reused.
   const result = process.platform === "win32"
-    ? spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; (Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $env:CODE_WORKSPACE_PROCESS_ID)).CommandLine"], { env: { ...process.env, CODE_WORKSPACE_PROCESS_ID: String(state.pid) }, encoding: "utf8", windowsHide: true, timeout: 10_000 })
+    ? spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; (Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $env:CODE_WORKSPACE_PROCESS_ID)).CommandLine"], { env: powershellEnv, encoding: "utf8", windowsHide: true, timeout: 10_000 })
     : spawnSync("ps", ["-ww", "-p", String(state.pid), "-o", "args="], { encoding: "utf8", timeout: 5000 });
   if (result.error || (result.status !== 0 && alive(state.pid))) throw new Error("Cannot verify the managed process identity; no process was stopped.");
   return result.stdout?.includes(`--code-workspace-instance=${state.instance}`) ?? false;

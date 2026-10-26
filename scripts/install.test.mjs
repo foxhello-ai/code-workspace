@@ -16,7 +16,10 @@ const redact = text => text.replace(/^(?:访问密码：|Access password:).*$/gm
 
 function run(command, args, env, timeout = 45_000) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { env, cwd: root, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    const childEnv = { ...env };
+    // Windows PowerShell must find its own modules when the test is run in pwsh.
+    if (windows && command === powershell) for (const key of Object.keys(childEnv)) if (key.toLowerCase() === "psmodulepath") delete childEnv[key];
+    const child = spawn(command, args, { env: childEnv, cwd: root, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     const output = [];
     const timer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error(`${command} timed out\n${redact(Buffer.concat(output).toString())}`)); }, timeout);
     child.stdout.on("data", chunk => output.push(chunk));
@@ -130,7 +133,7 @@ test("installer starts a fresh release, preserves config on reinstall, and runs 
     assert.equal((await (await fetch(`${h.url}/health`)).json()).version, "1.0.1");
     assert.equal(await readFile(configPath, "utf8"), config);
     for (const command of ["status", "restart", "status", "stop", "start"]) {
-      result = await h.cliRun(command);
+      result = await h.cliRun(command, windows ? { ...h.env, CODE_WORKSPACE_HOME: "", HOST: "", PORT: "", APP_PASSWORD: "" } : h.env);
       assert.equal(result.code, 0, result.text);
     }
     assert.equal((await (await fetch(`${h.url}/health`)).json()).version, "1.0.1");

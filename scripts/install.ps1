@@ -9,6 +9,9 @@ if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
 $architecture = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
 if ($architecture -ne 'AMD64') { throw 'The Windows release currently supports x64 only.' }
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+# Load the matching built-in module, even when called from a different
+# PowerShell edition whose PSModulePath was inherited by Windows PowerShell.
+Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1') -ErrorAction Stop
 
 $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
 if (-not $nodeCommand) { throw 'Node.js 22+ is required. Install it with: winget install --id OpenJS.NodeJS.LTS -e. Then reopen PowerShell.' }
