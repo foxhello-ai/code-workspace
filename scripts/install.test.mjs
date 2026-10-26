@@ -21,15 +21,29 @@ function run(command, args, env, timeout = 45_000) {
     if (windows && command === powershell) for (const key of Object.keys(childEnv)) if (key.toLowerCase() === "psmodulepath") delete childEnv[key];
     const child = spawn(command, args, { env: childEnv, cwd: root, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     const output = [];
-    const timer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error(`${command} timed out\n${redact(Buffer.concat(output).toString())}`)); }, timeout);
+    let settled = false;
+    let exitCode;
+    const timer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error(`${command} timed out (exit: ${exitCode ?? "pending"})\n${redact(Buffer.concat(output).toString())}`)); }, timeout);
     child.stdout.on("data", chunk => output.push(chunk));
     child.stderr.on("data", chunk => output.push(chunk));
     child.on("error", error => { clearTimeout(timer); reject(error); });
-    child.on("close", code => {
+    const finish = code => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       // Installer output contains a generated password; never expose it in test logs.
       const text = redact(Buffer.concat(output).toString());
+      child.stdout.destroy();
+      child.stderr.destroy();
       resolve({ code, text });
+    };
+    child.on("close", finish);
+    child.on("exit", code => {
+      exitCode = code;
+      clearTimeout(timer);
+      // A detached Windows daemon can keep inherited pipe handles open after
+      // PowerShell exits. Wait for buffered output, not the daemon's lifetime.
+      setTimeout(() => finish(code), 100);
     });
   });
 }
