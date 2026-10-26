@@ -34,14 +34,19 @@ const sourceModules = path.join(root, "node_modules");
 if (!existsSync(path.join(sourceModules, "fastify"))) {
   throw new Error("未找到生产依赖。请先执行 npm ci。");
 }
-cpSync(sourceModules, path.join(packageDir, "node_modules"), { recursive: true });
-
-const developmentPackages = Object.entries(lockfile.packages)
-  .filter(([relativePath, metadata]) => relativePath.startsWith("node_modules/") && metadata.dev === true)
+// Copy production packages directly. Copying the complete development tree and
+// then deleting it makes Windows release builds spend minutes on unused files.
+const productionPackages = Object.entries(lockfile.packages)
+  .filter(([relativePath, metadata]) => relativePath.startsWith("node_modules/") && metadata.dev !== true)
   .map(([relativePath]) => relativePath)
-  .sort((left, right) => right.length - left.length);
-for (const relativePath of developmentPackages) {
-  rmSync(path.join(packageDir, relativePath), { recursive: true, force: true });
+  .sort((left, right) => left.length - right.length);
+console.log("Staging production dependencies...");
+for (const relativePath of productionPackages) {
+  const source = path.join(root, relativePath);
+  if (!existsSync(source)) continue; // Optional dependencies for other platforms.
+  const target = path.join(packageDir, relativePath);
+  mkdirSync(path.dirname(target), { recursive: true });
+  cpSync(source, target, { recursive: true, filter: candidate => candidate !== path.join(source, "node_modules") });
 }
 rmSync(path.join(packageDir, "node_modules", ".bin"), { recursive: true, force: true });
 rmSync(path.join(packageDir, "node_modules", ".package-lock.json"), { force: true });
@@ -49,6 +54,7 @@ rmSync(path.join(packageDir, "node_modules", ".package-lock.json"), { force: tru
 const archiveTempDir = mkdtempSync(path.join(tmpdir(), "code-workspace-release-"));
 const archiveTempPath = path.join(archiveTempDir, archiveName);
 try {
+  console.log("Creating release archive...");
   const archiveCommand = process.platform === "win32" ? path.join(process.env.SystemRoot || "C:\\Windows", "System32", "tar.exe") : "tar";
   const archiveArgs = process.platform === "win32"
     ? ["-a", "-cf", archiveTempPath, "-C", stagingDir, "code-workspace"]

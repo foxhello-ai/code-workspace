@@ -53,7 +53,13 @@ try {
     $checksumText = [IO.File]::ReadAllText("$archivePath.sha256").Trim()
     if ($checksumText -notmatch '^([0-9a-fA-F]{64})(\s|$)') { throw 'Invalid SHA-256 checksum file.' }
     $expectedChecksum = $Matches[1]
-    if ((Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash -ne $expectedChecksum) { throw 'Release archive SHA-256 verification failed.' }
+    # Use .NET directly: Get-FileHash is a module function that may be missing
+    # when Windows PowerShell inherits PowerShell 7's module search path.
+    $archiveStream = [IO.File]::OpenRead($archivePath)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try { $actualChecksum = [BitConverter]::ToString($hasher.ComputeHash($archiveStream)).Replace('-', '') }
+    finally { $archiveStream.Dispose(); $hasher.Dispose() }
+    if ($actualChecksum -ne $expectedChecksum) { throw 'Release archive SHA-256 verification failed.' }
 
     Write-Host 'SHA-256 verified. Extracting the release...'
     & $tarExecutable -xf $archivePath -C $temporaryDirectory
