@@ -734,3 +734,4 @@ finance worktree 当时文件干净，但有 18 个提交未被远程跟踪分�
 - 管理：提供 start/status/logs/restart/stop；随机访问密码、仅本机监听、配置访问受限、升级保留密码与旧版本；不注册开机自启。
 - 验收：三个系统均验证首次安装、重复安装、升级加载新版本、密码保留、错误校验和拒绝、含空格及中文目录、生产包登录与 Git/Worktree API。服务管理还验证 PID 复用保护、端口占用及启动失败。
 - 实施：脚本与安装回归、Release 三系统构建/验证门禁及中英文 README；详见[安装文档](installation.md)。Windows 资产只在三系统验证全部通过后随新版本 Release 发布。
+- Windows 兼容处理：ZIP 打包/解压及 SHA-256 使用 .NET 内置能力，显式加载对应 PowerShell 版本的系统模块；服务管理的 Windows PowerShell 子进程使用独立模块路径，覆盖 PowerShell 5.1 与 7 调用环境。

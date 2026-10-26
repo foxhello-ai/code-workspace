@@ -30,7 +30,7 @@
 ## 环境
 
 - Node.js 22+
-- npm 10+
+- npm 10+（仅开发与打包需要，脚本安装无需 npm）
 - Git 2.39+（worktree 登记使用 porcelain NUL 格式；本次验证为 2.40.0）
 - Linux、macOS，或 Windows 11 x64（PowerShell 5.1+）
 
