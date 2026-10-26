@@ -34,6 +34,8 @@ $archiveName = "code-workspace-$versionRequest-windows-x64.zip"
 $releaseBase = if ($versionRequest -eq 'latest') { "$downloadBase/$repository/releases/latest/download" } else { "$downloadBase/$repository/releases/download/v$versionRequest" }
 $temporaryDirectory = Join-Path ([IO.Path]::GetTempPath()) ('code-workspace-install-' + [Guid]::NewGuid().ToString('N'))
 $utf8 = New-Object Text.UTF8Encoding($false)
+$tarExecutable = Join-Path $env:SystemRoot 'System32/tar.exe'
+if (-not (Test-Path -LiteralPath $tarExecutable)) { throw 'Windows 11 built-in tar.exe was not found.' }
 
 function Download-ReleaseFile([string]$Uri, [string]$Destination) {
     for ($attempt = 0; $attempt -lt 3; $attempt++) {
@@ -45,6 +47,7 @@ function Download-ReleaseFile([string]$Uri, [string]$Destination) {
 New-Item -ItemType Directory -Path $temporaryDirectory -Force | Out-Null
 try {
     $archivePath = Join-Path $temporaryDirectory $archiveName
+    Write-Host 'Downloading the compiled release...'
     Download-ReleaseFile "$releaseBase/$archiveName" $archivePath
     Download-ReleaseFile "$releaseBase/$archiveName.sha256" "$archivePath.sha256"
     $checksumText = [IO.File]::ReadAllText("$archivePath.sha256").Trim()
@@ -52,7 +55,9 @@ try {
     $expectedChecksum = $Matches[1]
     if ((Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash -ne $expectedChecksum) { throw 'Release archive SHA-256 verification failed.' }
 
-    Expand-Archive -LiteralPath $archivePath -DestinationPath $temporaryDirectory
+    Write-Host 'SHA-256 verified. Extracting the release...'
+    & $tarExecutable -xf $archivePath -C $temporaryDirectory
+    if ($LASTEXITCODE -ne 0) { throw 'Could not extract the release archive.' }
     $packageDirectory = Join-Path $temporaryDirectory 'code-workspace'
     foreach ($requiredFile in @('dist/server/server/index.js', 'package.json', 'bin/code-workspace.mjs', 'bin/code-workspace.cmd')) {
         if (-not (Test-Path -LiteralPath (Join-Path $packageDirectory $requiredFile) -PathType Leaf)) { throw "Incomplete release: $requiredFile" }
@@ -63,6 +68,7 @@ try {
     if ($versionRequest -ne 'latest' -and $versionRequest -ne $version) { throw 'The release version does not match the requested version.' }
 
     $targetDirectory = Join-Path $appHome "versions/$version"
+    Write-Host 'Installing files and preserving configuration...'
     $managerDirectory = Join-Path $appHome 'bin'
     foreach ($directory in @((Join-Path $appHome 'versions'), $managerDirectory, $binDirectory, $configDirectory)) {
         New-Item -ItemType Directory -Path $directory -Force | Out-Null
@@ -106,6 +112,7 @@ try {
         [Environment]::SetEnvironmentVariable('Path', ((([string]$userPath).TrimEnd(';') + ';' + $binDirectory).TrimStart(';')), 'User')
     }
     if (@($env:Path -split ';') -notcontains $binDirectory) { $env:Path = "$env:Path;$binDirectory" }
+    Write-Host 'Starting the background service...'
     & $nodeExecutable $manager start
     if ($LASTEXITCODE -ne 0) { throw "Service startup failed. Check $(Join-Path $appHome 'state/server.log')." }
     $savedConfig = [IO.File]::ReadAllText($configFile) | ConvertFrom-Json

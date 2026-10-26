@@ -10,7 +10,22 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
+  windows-smoke:
+    name: Verify Windows installer scripts
+    runs-on: windows-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test scripts/install.test.mjs scripts/service-manager.test.mjs
+
   build:
     name: Verify installer (${{ matrix.os }})
     strategy:
@@ -82,7 +97,7 @@ jobs:
   publish:
     name: Publish verified GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, windows-smoke]
     runs-on: ubuntu-latest
     permissions:
       contents: write

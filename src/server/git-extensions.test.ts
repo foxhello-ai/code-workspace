@@ -38,7 +38,7 @@ beforeEach(async () => {
   app = await buildApp({ disableAuth: true });
   await call("/api/workspace/open", "POST", { path: root });
 });
-afterEach(async () => { if (authServer) { await new Promise<void>(resolve => authServer!.close(() => resolve())); authServer = undefined; } vi.restoreAllMocks(); await app.close(); await rm(base, { recursive: true, force: true }); });
+afterEach(async () => { if (authServer) { await new Promise<void>(resolve => authServer!.close(() => resolve())); authServer = undefined; } vi.restoreAllMocks(); await app.close(); await rm(base, { recursive: true, force: true, maxRetries: 5 }); });
 
 describe("B-009 / B-010 stage A", () => {
   it("WT-11: returns shared remote addresses without merging independent clones or exposing credentials", async () => {

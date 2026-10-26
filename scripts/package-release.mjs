@@ -49,9 +49,9 @@ rmSync(path.join(packageDir, "node_modules", ".package-lock.json"), { force: tru
 const archiveTempDir = mkdtempSync(path.join(tmpdir(), "code-workspace-release-"));
 const archiveTempPath = path.join(archiveTempDir, archiveName);
 try {
-  const archiveCommand = process.platform === "win32" ? "powershell.exe" : "tar";
+  const archiveCommand = process.platform === "win32" ? path.join(process.env.SystemRoot || "C:\\Windows", "System32", "tar.exe") : "tar";
   const archiveArgs = process.platform === "win32"
-    ? ["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; Compress-Archive -LiteralPath $env:CODE_WORKSPACE_PACKAGE_DIR -DestinationPath $env:CODE_WORKSPACE_ARCHIVE_PATH -CompressionLevel Optimal"]
+    ? ["-a", "-cf", archiveTempPath, "-C", stagingDir, "code-workspace"]
     : ["-czf", archiveTempPath, "-C", stagingDir, "code-workspace"];
   execFileSync(archiveCommand, archiveArgs, {
     cwd: root,

@@ -12,19 +12,20 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const archiveFile = process.env.CODE_WORKSPACE_TEST_ARCHIVE;
 const windows = process.platform === "win32";
 const powershell = "powershell.exe";
+const redact = text => text.replace(/^(?:访问密码：|Access password:).*$/gm, "Access password: [redacted]");
 
 function run(command, args, env, timeout = 45_000) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { env, cwd: root, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     const output = [];
-    const timer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error(`${command} timed out`)); }, timeout);
+    const timer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error(`${command} timed out\n${redact(Buffer.concat(output).toString())}`)); }, timeout);
     child.stdout.on("data", chunk => output.push(chunk));
     child.stderr.on("data", chunk => output.push(chunk));
     child.on("error", error => { clearTimeout(timer); reject(error); });
     child.on("close", code => {
       clearTimeout(timer);
       // Installer output contains a generated password; never expose it in test logs.
-      const text = Buffer.concat(output).toString().replace(/^(?:访问密码：|Access password:).*$/gm, "Access password: [redacted]");
+      const text = redact(Buffer.concat(output).toString());
       resolve({ code, text });
     });
   });
@@ -97,7 +98,7 @@ async function harness(body) {
     } catch (error) { if (error.code !== "ENOENT") throw error; }
     finally {
       await new Promise(resolve => server.close(resolve));
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 5 });
     }
   }
 }
