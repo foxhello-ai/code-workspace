@@ -23,10 +23,12 @@ fail() {
 command -v curl >/dev/null 2>&1 || fail "需要 curl。"
 command -v tar >/dev/null 2>&1 || fail "需要 tar。"
 command -v node >/dev/null 2>&1 || fail "需要 Node.js 22 或更高版本。"
+command -v git >/dev/null 2>&1 || fail "需要 Git 2.39 或更高版本。"
 
 node_major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || true)"
 case "$node_major" in ''|*[!0-9]*) fail "无法识别 Node.js 版本。" ;; esac
 [ "$node_major" -ge 22 ] || fail "需要 Node.js 22 或更高版本，当前版本为 $(node --version)。"
+node -e 'const match = process.argv[1].match(/git version (\d+)\.(\d+)/); process.exit(match && (Number(match[1]) > 2 || Number(match[1]) === 2 && Number(match[2]) >= 39) ? 0 : 1);' "$(git --version)" || fail "需要 Git 2.39 或更高版本。"
 
 if [ "$VERSION_REQUEST" = "latest" ]; then
   expected_version=""

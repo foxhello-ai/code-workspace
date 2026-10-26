@@ -11,7 +11,8 @@ const version = packageJson.version;
 const releaseDir = path.join(root, "release");
 const stagingDir = path.join(releaseDir, "staging");
 const packageDir = path.join(stagingDir, "code-workspace");
-const archiveName = `code-workspace-${version}.tar.gz`;
+const suffix = process.platform === "win32" ? `-windows-${process.arch}.zip` : ".tar.gz";
+const archiveName = `code-workspace-${version}${suffix}`;
 const archivePath = path.join(releaseDir, archiveName);
 const checksumPath = `${archivePath}.sha256`;
 const lockfile = JSON.parse(readFileSync(path.join(root, "package-lock.json"), "utf8"));
@@ -48,10 +49,14 @@ rmSync(path.join(packageDir, "node_modules", ".package-lock.json"), { force: tru
 const archiveTempDir = mkdtempSync(path.join(tmpdir(), "code-workspace-release-"));
 const archiveTempPath = path.join(archiveTempDir, archiveName);
 try {
-  execFileSync("tar", ["-czf", archiveTempPath, "-C", stagingDir, "code-workspace"], {
+  const archiveCommand = process.platform === "win32" ? "powershell.exe" : "tar";
+  const archiveArgs = process.platform === "win32"
+    ? ["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; Compress-Archive -LiteralPath $env:CODE_WORKSPACE_PACKAGE_DIR -DestinationPath $env:CODE_WORKSPACE_ARCHIVE_PATH -CompressionLevel Optimal"]
+    : ["-czf", archiveTempPath, "-C", stagingDir, "code-workspace"];
+  execFileSync(archiveCommand, archiveArgs, {
     cwd: root,
     stdio: "inherit",
-    env: { ...process.env, LC_ALL: "C", LANG: "C" }
+    env: { ...process.env, LC_ALL: "C", LANG: "C", CODE_WORKSPACE_PACKAGE_DIR: packageDir, CODE_WORKSPACE_ARCHIVE_PATH: archiveTempPath }
   });
   copyFileSync(archiveTempPath, archivePath);
 } finally {
@@ -60,6 +65,9 @@ try {
 
 const checksum = createHash("sha256").update(readFileSync(archivePath)).digest("hex");
 writeFileSync(checksumPath, `${checksum}  ${archiveName}\n`);
+const aliasName = `code-workspace-latest${suffix}`;
+copyFileSync(archivePath, path.join(releaseDir, aliasName));
+writeFileSync(path.join(releaseDir, `${aliasName}.sha256`), `${checksum}  ${aliasName}\n`);
 
 console.log(`已生成发布包：${path.relative(root, archivePath)}`);
 console.log(`SHA-256：${checksum}`);

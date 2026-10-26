@@ -1,6 +1,6 @@
 {
   "name": "code-workspace",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,6 +16,7 @@
     "pm2:logs": "pm2 logs code-workspace",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "vitest run",
+    "test:install": "node --test scripts/install.test.mjs scripts/service-manager.test.mjs",
     "test:watch": "vitest",
     "check": "npm run typecheck && npm test && npm run build"
   },

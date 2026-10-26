@@ -9,6 +9,7 @@ function passwordFromEnvFile() {
 }
 
 export const config = {
+  serviceInstanceId: process.env.CODE_WORKSPACE_INSTANCE_ID ?? "",
   host: process.env.HOST ?? "127.0.0.1",
   port: Number(process.env.PORT ?? 43110),
   fileWarnBytes: Number(process.env.FILE_WARN_BYTES ?? 2 * 1024 * 1024),

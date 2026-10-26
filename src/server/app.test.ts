@@ -46,7 +46,7 @@ describe("workspace API", () => {
       await mkdir(path.join(outside, "nested"));
       await writeFile(path.join(outside, "nested", "child.txt"), "linked child\n");
       await writeFile(path.join(outside, "linked.md"), "linked file\n");
-      await symlink(path.join(outside, "nested"), path.join(root, "linked-dir"));
+      await symlink(path.join(outside, "nested"), path.join(root, "linked-dir"), "dir");
       await symlink(path.join(outside, "linked.md"), path.join(root, "linked-file.md"));
 
       const rootTree = await app.inject({ method: "GET", url: "/api/files/tree" });
@@ -82,8 +82,8 @@ describe("workspace API", () => {
         execFileSync("git", ["commit", "-qm", "initial"], { cwd: repo });
       }
       await mkdir(path.join(aggregate, "services"));
-      await symlink(repoA, path.join(aggregate, "repo-a"));
-      await symlink(repoB, path.join(aggregate, "services", "repo-b"));
+      await symlink(repoA, path.join(aggregate, "repo-a"), "dir");
+      await symlink(repoB, path.join(aggregate, "services", "repo-b"), "dir");
 
       config.gitDiscoveryDepth = 1;
       const depthOne = await app.inject({ method: "POST", url: "/api/workspace/open", payload: { path: aggregate } });
@@ -173,7 +173,7 @@ describe("workspace API", () => {
     const aggregate = await mkdtemp(path.join(os.tmpdir(), "code-workspace-aggregate-"));
     const originalDepth = config.gitDiscoveryDepth;
     try {
-      await symlink(root, path.join(aggregate, "repo-a"));
+      await symlink(root, path.join(aggregate, "repo-a"), "dir");
       config.gitDiscoveryDepth = 1;
       const opened = await app.inject({ method: "POST", url: "/api/workspace/open", payload: { path: aggregate } });
       expect(opened.statusCode).toBe(200);

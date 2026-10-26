@@ -6,6 +6,7 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { AppError } from "./errors.js";
+import { config } from "./config.js";
 import { WorkspaceService } from "./services/workspace-service.js";
 import { FileService } from "./services/file-service.js";
 import { GitService } from "./services/git-service.js";
@@ -91,7 +92,10 @@ export async function buildApp(options: { disableAuth?: boolean } = {}) {
     }
   });
 
-  app.get("/health", async () => ({ ok: true }));
+  app.get("/health", async (_request, reply) => {
+    if (config.serviceInstanceId) reply.header("x-code-workspace-instance", config.serviceInstanceId);
+    return { ok: true };
+  });
   app.get("/api/auth/status", async (request) => ({ data: { authenticated: auth.isAuthenticated(request.headers.cookie) }, requestId: request.id }));
   app.post<{ Body: { password: string } }>("/api/auth/login", async (request, reply) => {
     const result = auth.login(request.body?.password ?? "", request.ip);

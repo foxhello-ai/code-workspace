@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node
 import { createServer, type Server } from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { buildApp } from "./app.js";
 import { config } from "./config.js";
 import { GitRunner } from "./infrastructure/git-runner.js";
@@ -33,7 +34,7 @@ beforeEach(async () => {
   git(main, "push", "-qu", "origin", "trunk"); git(main, "remote", "set-head", "origin", "-a");
   git(main, "worktree", "add", "-qb", "feat/local", linked);
   git(base, "clone", "-q", remote, producer); configure(producer);
-  await symlink(linked, path.join(root, "alias"));
+  await symlink(linked, path.join(root, "alias"), "dir");
   app = await buildApp({ disableAuth: true });
   await call("/api/workspace/open", "POST", { path: root });
 });
@@ -264,7 +265,7 @@ describe("B-009 / B-010 stage A", () => {
       expect((await overview()).groups[0].truncated).toBe(true);
       expect((await call("/api/git/graph")).statusCode).toBe(503);
     } finally { config.gitWorktreeLimit = beforeLimit; }
-    const shallow = path.join(root, "shallow"); git(base, "clone", "-q", "--depth=1", `file://${remote}`, shallow);
+    const shallow = path.join(root, "shallow"); git(base, "clone", "-q", "--depth=1", pathToFileURL(remote).href, shallow);
     await call("/api/workspace/open", "POST", { path: shallow });
     expect((await call("/api/git/graph")).json().data.shallow).toBe(true);
   });

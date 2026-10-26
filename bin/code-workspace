@@ -9,6 +9,10 @@ CONFIG_FILE="$CONFIG_DIR/config.env"
 PID_FILE="$STATE_DIR/server.pid"
 LOG_FILE="$STATE_DIR/server.log"
 
+process_identity() {
+  node -e 'process.stdout.write(require("node:crypto").createHash("sha256").update(process.argv[1]).digest("hex"))' "$APP_HOME"
+}
+
 config_value() {
   key="$1"
   [ -r "$CONFIG_FILE" ] || return 0
@@ -53,7 +57,14 @@ process_matches() {
   pid="$(cat "$PID_FILE" 2>/dev/null || true)"
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
   kill -0 "$pid" 2>/dev/null || return 1
-  ps -p "$pid" -o command= 2>/dev/null | grep -F "$APP_HOME/current/dist/server/server/index.js" >/dev/null 2>&1
+  # ps may escape non-ASCII paths under LC_ALL=C. An ASCII identity also works
+  # for installation directories containing spaces and Chinese characters.
+  process_command="$(ps -ww -p "$pid" -o command= 2>/dev/null || true)"
+  case "$process_command" in
+    *"--code-workspace-home=$(process_identity)"*) return 0 ;;
+    *"$APP_HOME/current/dist/server/server/index.js"*) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 start() {
@@ -69,7 +80,7 @@ start() {
   if command -v curl >/dev/null 2>&1; then
     attempt=0
     while [ "$attempt" -lt 20 ]; do
-      if curl -fsS --max-time 1 "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
+      if process_matches && curl -fsS --max-time 1 -D - -o /dev/null "http://127.0.0.1:$PORT/health" 2>/dev/null | tr -d '\r' | grep -F "x-code-workspace-instance: $(process_identity)" >/dev/null 2>&1; then
         echo "Code Workspace 已启动：http://127.0.0.1:$PORT"
         return 0
       fi
@@ -107,7 +118,9 @@ case "${1:-start}" in
   run)
     require_runtime
     cd "$CURRENT_DIR"
-    exec node "$CURRENT_DIR/dist/server/server/index.js"
+    CODE_WORKSPACE_INSTANCE_ID="$(process_identity)"
+    export CODE_WORKSPACE_INSTANCE_ID
+    exec node "$CURRENT_DIR/dist/server/server/index.js" "--code-workspace-home=$CODE_WORKSPACE_INSTANCE_ID"
     ;;
   start)
     start

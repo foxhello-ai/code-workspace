@@ -10,10 +10,12 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const archiveFile = process.env.CODE_WORKSPACE_TEST_ARCHIVE;
+const windows = process.platform === "win32";
+const powershell = "powershell.exe";
 
 function run(command, args, env, timeout = 45_000) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { env, cwd: root, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(command, args, { env, cwd: root, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     const output = [];
     const timer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error(`${command} timed out`)); }, timeout);
     child.stdout.on("data", chunk => output.push(chunk));
@@ -22,7 +24,7 @@ function run(command, args, env, timeout = 45_000) {
     child.on("close", code => {
       clearTimeout(timer);
       // Installer output contains a generated password; never expose it in test logs.
-      const text = Buffer.concat(output).toString().replace(/^访问密码：.*$/gm, "访问密码：[redacted]");
+      const text = Buffer.concat(output).toString().replace(/^(?:访问密码：|Access password:).*$/gm, "Access password: [redacted]");
       resolve({ code, text });
     });
   });
@@ -46,18 +48,22 @@ async function fixtureArchive(directory, version) {
   await mkdir(path.join(stage, "bin"));
   await writeFile(path.join(stage, "package.json"), JSON.stringify({ version }));
   await copyFile(path.join(root, "bin/code-workspace"), path.join(stage, "bin/code-workspace"));
+  for (const name of ["code-workspace.mjs", "code-workspace.cmd"]) await copyFile(path.join(root, "bin", name), path.join(stage, "bin", name));
   await chmod(path.join(stage, "bin/code-workspace"), 0o755);
   await writeFile(path.join(stage, "dist/server/server/index.js"), `
 const http = require("node:http");
 const server = http.createServer((request, response) => {
   response.setHeader("content-type", "application/json");
+  if (process.env.CODE_WORKSPACE_INSTANCE_ID) response.setHeader("x-code-workspace-instance", process.env.CODE_WORKSPACE_INSTANCE_ID);
   response.end(JSON.stringify({ ok: true, version: ${JSON.stringify(version)} }));
 });
 server.listen(Number(process.env.PORT), "127.0.0.1");
 process.on("SIGTERM", () => server.close());
 `);
-  const archive = path.join(directory, `${version}.tar.gz`);
-  const result = await run("tar", ["-czf", archive, "-C", path.dirname(stage), "code-workspace"], process.env);
+  const archive = path.join(directory, `${version}${windows ? ".zip" : ".tar.gz"}`);
+  const result = windows
+    ? await run(powershell, ["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; Compress-Archive -LiteralPath $env:CODE_WORKSPACE_FIXTURE_STAGE -DestinationPath $env:CODE_WORKSPACE_FIXTURE_ARCHIVE"], { ...process.env, CODE_WORKSPACE_FIXTURE_STAGE: stage, CODE_WORKSPACE_FIXTURE_ARCHIVE: archive })
+    : await run("tar", ["-czf", archive, "-C", path.dirname(stage), "code-workspace"], process.env);
   assert.equal(result.code, 0, result.text);
   return readFile(archive);
 }
@@ -69,20 +75,25 @@ async function harness(body) {
     if (request.url.endsWith(".sha256")) {
       const checksum = corrupt ? "0".repeat(64) : createHash("sha256").update(archive).digest("hex");
       response.end(`${checksum}  code-workspace-latest.tar.gz\n`);
-    } else if (request.url.endsWith(".tar.gz")) response.end(archive);
+    } else if (request.url.endsWith(".tar.gz") || request.url.endsWith(".zip")) response.end(archive);
     else { response.statusCode = 404; response.end(); }
   });
   const mirrorPort = await listen(server), port = await availablePort();
-  const env = { ...process.env, CODE_WORKSPACE_HOME: path.join(directory, "app"), CODE_WORKSPACE_BIN_DIR: path.join(directory, "bin"), XDG_CONFIG_HOME: path.join(directory, "config"), XDG_STATE_HOME: path.join(directory, "state"), CODE_WORKSPACE_RELEASE_DOWNLOAD_BASE: `http://127.0.0.1:${mirrorPort}`, CODE_WORKSPACE_RELEASE_REPOSITORY: "test/code-workspace", HOST: "127.0.0.1", PORT: String(port), NO_PROXY: "127.0.0.1,localhost", no_proxy: "127.0.0.1,localhost", LC_ALL: "C", LANG: "C" };
+  const env = { ...process.env, CODE_WORKSPACE_HOME: path.join(directory, "app with spaces 中文"), CODE_WORKSPACE_BIN_DIR: path.join(directory, "bin with spaces 中文"), CODE_WORKSPACE_SKIP_PATH_UPDATE: "1", XDG_CONFIG_HOME: path.join(directory, "config"), XDG_STATE_HOME: path.join(directory, "state"), CODE_WORKSPACE_RELEASE_DOWNLOAD_BASE: `http://127.0.0.1:${mirrorPort}`, CODE_WORKSPACE_RELEASE_REPOSITORY: "test/code-workspace", HOST: "127.0.0.1", PORT: String(port), NO_PROXY: "127.0.0.1,localhost", no_proxy: "127.0.0.1,localhost", LC_ALL: "C", LANG: "C" };
   delete env.APP_PASSWORD;
   delete env.CODE_WORKSPACE_VERSION;
-  const cli = path.join(directory, "bin/code-workspace");
+  const cli = path.join(env.CODE_WORKSPACE_BIN_DIR, `code-workspace${windows ? ".cmd" : ""}`);
+  const cliRun = (command, overrides = env) => windows
+    ? run(powershell, ["-NoProfile", "-NonInteractive", "-Command", "& $env:CODE_WORKSPACE_TEST_CLI $env:CODE_WORKSPACE_TEST_ACTION; exit $LASTEXITCODE"], { ...overrides, CODE_WORKSPACE_TEST_CLI: cli, CODE_WORKSPACE_TEST_ACTION: command })
+    : run(cli, [command], overrides);
+  const configPath = windows ? path.join(env.CODE_WORKSPACE_HOME, "config/config.json") : path.join(directory, "config/code-workspace/config.env");
   try {
-    await body({ directory, env, port, url: `http://127.0.0.1:${port}`, cli, setArchive(value) { archive = value; }, corruptChecksum() { corrupt = true; }, install: () => run("sh", [path.join(root, "scripts/install.sh")], env, 90_000) });
+    await body({ directory, env, port, url: `http://127.0.0.1:${port}`, cli, cliRun, configPath, setArchive(value) { archive = value; }, corruptChecksum() { corrupt = true; }, install: () => windows
+      ? run(powershell, ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", path.join(root, "scripts/install.ps1")], env, 90_000)
+      : run("sh", [path.join(root, "scripts/install.sh")], env, 90_000) });
   } finally {
     try {
-      const result = await run(cli, ["stop"], env);
-      assert.equal(result.code, 0, result.text);
+      if (await stat(cli).catch(() => null)) { const result = await cliRun("stop"); assert.equal(result.code, 0, result.text); }
     } catch (error) { if (error.code !== "ENOENT") throw error; }
     finally {
       await new Promise(resolve => server.close(resolve));
@@ -99,10 +110,16 @@ test("installer starts a fresh release, preserves config on reinstall, and runs 
     let result = await h.install();
     assert.equal(result.code, 0, result.text);
     assert.equal((await (await fetch(`${h.url}/health`)).json()).version, "1.0.0");
-    const configPath = path.join(h.directory, "config/code-workspace/config.env");
+    const configPath = h.configPath;
     const config = await readFile(configPath, "utf8");
-    assert.equal((await stat(configPath)).mode & 0o777, 0o600);
-    assert.match(config, /APP_PASSWORD=[A-Za-z0-9_-]{32}/);
+    if (windows) {
+      assert.match(JSON.parse(config).APP_PASSWORD, /^[A-Za-z0-9_-]{32}$/);
+      const acl = await run(powershell, ["-NoProfile", "-NonInteractive", "-Command", "(Get-Acl -LiteralPath $env:CODE_WORKSPACE_TEST_CONFIG).AreAccessRulesProtected"], { ...h.env, CODE_WORKSPACE_TEST_CONFIG: path.dirname(configPath) });
+      assert.equal(acl.code, 0, acl.text); assert.match(acl.text, /True/);
+    } else {
+      assert.equal((await stat(configPath)).mode & 0o777, 0o600);
+      assert.match(config, /APP_PASSWORD=[A-Za-z0-9_-]{32}/);
+    }
     result = await h.install();
     assert.equal(result.code, 0, result.text);
     assert.equal(await readFile(configPath, "utf8"), config);
@@ -112,7 +129,7 @@ test("installer starts a fresh release, preserves config on reinstall, and runs 
     assert.equal((await (await fetch(`${h.url}/health`)).json()).version, "1.0.1");
     assert.equal(await readFile(configPath, "utf8"), config);
     for (const command of ["status", "restart", "status", "stop", "start"]) {
-      result = await run(h.cli, [command], h.env);
+      result = await h.cliRun(command);
       assert.equal(result.code, 0, result.text);
     }
     assert.equal((await (await fetch(`${h.url}/health`)).json()).version, "1.0.1");
@@ -126,7 +143,7 @@ test("installer rejects an archive with an incorrect checksum", { timeout: 30_00
     const result = await h.install();
     assert.notEqual(result.code, 0);
     assert.match(result.text, /SHA-256/);
-    await assert.rejects(stat(path.join(h.directory, "app/current")), { code: "ENOENT" });
+    await assert.rejects(stat(path.join(h.env.CODE_WORKSPACE_HOME, windows ? "current.json" : "current")), { code: "ENOENT" });
   });
 });
 
@@ -143,8 +160,8 @@ test("production archive installs with bundled dependencies and serves authentic
     assert.ok(assets.length > 0);
     for (const asset of assets) assert.equal((await fetch(h.url + asset)).status, 200);
     assert.equal((await fetch(`${h.url}/api/workspace`)).status, 401);
-    const config = await readFile(path.join(h.directory, "config/code-workspace/config.env"), "utf8");
-    const password = config.match(/^APP_PASSWORD=(.+)$/m)[1];
+    const config = await readFile(h.configPath, "utf8");
+    const password = windows ? JSON.parse(config).APP_PASSWORD : config.match(/^APP_PASSWORD=(.+)$/m)[1];
     const login = await fetch(`${h.url}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password }) });
     assert.equal(login.status, 200);
     const headers = { cookie: login.headers.get("set-cookie").split(";")[0], "content-type": "application/json" };
@@ -163,6 +180,10 @@ test("production archive installs with bundled dependencies and serves authentic
     const graph = await fetch(`${h.url}/api/git/graph`, { headers });
     assert.equal(graph.status, 200);
     assert.equal((await graph.json()).data.scope, "all");
-    await readFile(path.join(h.directory, "app/current/README.en.md"));
+    const installation = windows ? JSON.parse(await readFile(path.join(h.env.CODE_WORKSPACE_HOME, "current.json"), "utf8")).path : path.join(h.env.CODE_WORKSPACE_HOME, "current");
+    await readFile(path.join(installation, "README.en.md"));
+    // The release must be ready to run without a checkout, compiler, or npm install.
+    await assert.rejects(stat(path.join(installation, "src")), { code: "ENOENT" });
+    await assert.rejects(stat(path.join(installation, "node_modules/typescript")), { code: "ENOENT" });
   });
 });
