@@ -11,7 +11,10 @@ if ($architecture -ne 'AMD64') { throw 'The Windows release currently supports x
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 # Load the matching built-in module, even when called from a different
 # PowerShell edition whose PSModulePath was inherited by Windows PowerShell.
-Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1') -ErrorAction Stop
+foreach ($moduleName in @('Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Security')) {
+    Import-Module (Join-Path $PSHOME "Modules/$moduleName/$moduleName.psd1") -ErrorAction Stop
+}
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
 if (-not $nodeCommand) { throw 'Node.js 22+ is required. Install it with: winget install --id OpenJS.NodeJS.LTS -e. Then reopen PowerShell.' }
@@ -37,8 +40,6 @@ $archiveName = "code-workspace-$versionRequest-windows-x64.zip"
 $releaseBase = if ($versionRequest -eq 'latest') { "$downloadBase/$repository/releases/latest/download" } else { "$downloadBase/$repository/releases/download/v$versionRequest" }
 $temporaryDirectory = Join-Path ([IO.Path]::GetTempPath()) ('code-workspace-install-' + [Guid]::NewGuid().ToString('N'))
 $utf8 = New-Object Text.UTF8Encoding($false)
-$tarExecutable = Join-Path $env:SystemRoot 'System32/tar.exe'
-if (-not (Test-Path -LiteralPath $tarExecutable)) { throw 'Windows 11 built-in tar.exe was not found.' }
 
 function Download-ReleaseFile([string]$Uri, [string]$Destination) {
     for ($attempt = 0; $attempt -lt 3; $attempt++) {
@@ -65,8 +66,7 @@ try {
     if ($actualChecksum -ne $expectedChecksum) { throw 'Release archive SHA-256 verification failed.' }
 
     Write-Host 'SHA-256 verified. Extracting the release...'
-    & $tarExecutable -xf $archivePath -C $temporaryDirectory
-    if ($LASTEXITCODE -ne 0) { throw 'Could not extract the release archive.' }
+    [IO.Compression.ZipFile]::ExtractToDirectory($archivePath, $temporaryDirectory)
     $packageDirectory = Join-Path $temporaryDirectory 'code-workspace'
     foreach ($requiredFile in @('dist/server/server/index.js', 'package.json', 'bin/code-workspace.mjs', 'bin/code-workspace.cmd')) {
         if (-not (Test-Path -LiteralPath (Join-Path $packageDirectory $requiredFile) -PathType Leaf)) { throw "Incomplete release: $requiredFile" }
