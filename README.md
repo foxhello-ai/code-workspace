@@ -32,7 +32,7 @@
 - Node.js 22+
 - npm 10+
 - Git 2.39+（worktree 登记使用 porcelain NUL 格式；本次验证为 2.40.0）
-- Linux 或 macOS
+- Linux、macOS，或 Windows 11 x64（PowerShell 5.1+）
 
 ## 开发运行
 
@@ -55,15 +55,25 @@ npm start
 
 ## 快速安装
 
-macOS 或 Linux 可直接安装最新 GitHub Release。脚本会校验发布包、生成随机访问密码并启动服务：
+三个平台都通过脚本安装编译好的 GitHub Release，校验 SHA-256、生成随机访问密码并在后台启动服务；安装用户无需克隆源码、安装 npm 依赖或执行构建。本机需先有 Node.js 22+ 和 Git 2.39+。
+
+**macOS / Linux：**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | bash
 ```
 
+**Windows 11 x64（在 PowerShell 中执行）：**
+
+```powershell
+irm https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.ps1 | iex
+```
+
+Windows 如未安装运行环境，可先通过 `winget install --id OpenJS.NodeJS.LTS -e` 和 `winget install --id Git.Git -e` 安装，然后重新打开 PowerShell。无需 WSL、Git Bash 或管理员权限来安装 Code Workspace。
+
 安装完成后访问 `http://127.0.0.1:43110`。完整的前置条件、升级、配置与服务管理说明见 [安装文档](docs/installation.md)。
 
-发布包已包含编译产物和生产依赖；本机仍需要 Node.js 22+、Git 2.39+、`curl`、`tar` 和 SHA-256 校验工具。安装命令取得的是 **Latest Release**，不是 `main` 分支的源码快照。发布工作流仅在推送与 `package.json` 版本一致的 `v*` 标签时触发；推送 `main` 不会自动更新安装包。
+发布包已包含编译产物和对应平台的生产依赖；macOS/Linux 还需 `curl`、`tar` 和 SHA-256 校验工具，Windows 使用系统 PowerShell 的下载、解压及校验功能。安装命令取得的是 **Latest Release**。`main`、PR 和手动触发会运行三个系统的验证，只有与 `package.json` 版本一致的 `v*` 标签会发布安装包。
 
 安装后可检查服务：
 
@@ -73,6 +83,8 @@ curl -fsS http://127.0.0.1:43110/health
 ```
 
 健康检查应返回 `{"ok":true}`。访问密码由安装脚本随机生成，保存在 `~/.config/code-workspace/config.env`。
+
+Windows 安装后可直接运行 `code-workspace status`；通用管理命令为 `code-workspace start|status|logs|restart|stop`。Windows 配置保存在 `$env:LOCALAPPDATA\CodeWorkspace\config\config.json`，日志位于同一安装目录的 `state\server.log`。在页面输入 `D:\projects\my-project` 等 Windows 路径打开工作区。
 
 重新执行安装命令会保留配置和密码，停止原安装服务后启动所选版本；旧版本目录保留。升级会重启服务，请先保存编辑内容。
 
@@ -130,10 +142,10 @@ npm run check
 
 ```bash
 npm run package:release
-CODE_WORKSPACE_TEST_ARCHIVE="release/code-workspace-$(node -p 'require("./package.json").version').tar.gz" node --test scripts/install.test.mjs
+CODE_WORKSPACE_TEST_ARCHIVE="release/code-workspace-$(node -p 'require("./package.json").version').tar.gz" node --test scripts/install.test.mjs scripts/service-manager.test.mjs
 ```
 
-同一检查已接入 Release 工作流，在公开发布安装包之前执行。
+Windows 发布 ZIP 的验证命令见[安装文档](docs/installation.md)。同一检查在 Linux、macOS、Windows 发布任务中执行，全部通过后才公开安装包。
 
 ## 配置
 

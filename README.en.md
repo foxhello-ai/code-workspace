@@ -31,19 +31,29 @@ It does not start terminals, Codex sessions, or AI services. External tools can 
 - Node.js 22 or later.
 - npm 10 or later for development and building from source.
 - Git 2.39 or later; Worktree registration uses the NUL-delimited porcelain format. The current acceptance environment uses Git 2.40.0.
-- Linux or macOS.
+- Linux, macOS, or Windows 11 x64 (PowerShell 5.1+).
 
 ## Quick install
 
-Install the latest GitHub Release on macOS or Linux. The installer verifies the archive, generates a random access password, and starts the service:
+Install a compiled GitHub Release directly. Both installers verify SHA-256, generate a random password, and start the service in the background. No source checkout, npm install, or local build is required. Install Node.js 22+ and Git 2.39+ first.
+
+**macOS / Linux:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | bash
 ```
 
-Open `http://127.0.0.1:43110`. The archive includes compiled files and production dependencies; Node.js 22+, Git 2.39+, `curl`, `tar`, and `sha256sum` or `shasum` must be available locally. No npm install is needed to run the release.
+**Windows 11 x64, in PowerShell:**
 
-The installer downloads the **Latest Release**, rather than a snapshot of `main`. The release workflow runs only when a pushed `v*` tag matches the version in `package.json`. Pushing to `main` does not update the installation archive.
+```powershell
+irm https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.ps1 | iex
+```
+
+If needed, install prerequisites with `winget install --id OpenJS.NodeJS.LTS -e` and `winget install --id Git.Git -e`, then reopen PowerShell. Installing Code Workspace does not require administrator privileges, WSL, or Git Bash.
+
+Open `http://127.0.0.1:43110`. The archives include compiled files and platform-specific production dependencies. macOS/Linux also require `curl`, `tar`, and `sha256sum` or `shasum`; Windows uses built-in PowerShell download, extraction, and checksum commands.
+
+The installers download the **Latest Release**. Pushes to `main`, pull requests, and manual runs verify all three operating systems. Only a pushed `v*` tag matching `package.json` publishes release archives after every platform passes.
 
 Check the installed service:
 
@@ -53,6 +63,8 @@ curl -fsS http://127.0.0.1:43110/health
 ```
 
 The health endpoint should return `{"ok":true}`. The installer prints the generated password and saves it in `~/.config/code-workspace/config.env` with owner-only permissions.
+
+On Windows, run `code-workspace status` and `Invoke-RestMethod http://127.0.0.1:43110/health`. Configuration is stored at `$env:LOCALAPPDATA\CodeWorkspace\config\config.json`, with access limited to the current account. Logs are in `state\server.log` under the same installation directory. Open a workspace using its Windows path, such as `D:\projects\my-project`.
 
 The default installation directory is `~/.local/share/code-workspace`; the command is linked to `~/.local/bin/code-workspace`. Add `~/.local/bin` to your `PATH` to use:
 
@@ -67,8 +79,10 @@ code-workspace stop
 Logs and the PID file are stored in `~/.local/state/code-workspace`. Rerun the install command to install the latest release. It preserves configuration and passwords, stops the managed service, and starts the selected version. Previous version directories are retained. Save your edits before upgrading, as the service restarts. For a specific release, set `CODE_WORKSPACE_VERSION`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | CODE_WORKSPACE_VERSION=1.1.1 bash
+curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | CODE_WORKSPACE_VERSION=1.1.2 bash
 ```
+
+On Windows, set `$env:CODE_WORKSPACE_VERSION = '1.1.2'` before running the PowerShell installer. The same `start`, `status`, `logs`, `restart`, and `stop` commands are available on Windows; the command directory is added to your user PATH. Services run as the current user and do not automatically start after a reboot.
 
 See the [installation guide, in Chinese](docs/installation.md) for configuration, upgrades, and release maintenance.
 
@@ -145,10 +159,10 @@ Verify installation, reinstallation, the running version after an upgrade, check
 
 ```bash
 npm run package:release
-CODE_WORKSPACE_TEST_ARCHIVE="release/code-workspace-$(node -p 'require("./package.json").version').tar.gz" node --test scripts/install.test.mjs
+CODE_WORKSPACE_TEST_ARCHIVE="release/code-workspace-$(node -p 'require("./package.json").version').tar.gz" node --test scripts/install.test.mjs scripts/service-manager.test.mjs
 ```
 
-The Release workflow runs the same checks before publishing the installation archive.
+On Windows, set `CODE_WORKSPACE_TEST_ARCHIVE` to `release/code-workspace-<version>-windows-x64.zip`. The Release workflow runs these checks on Linux, macOS, and Windows before publishing archives. They cover fresh install, reinstall, upgrades, checksums, configuration retention, background process ownership, and authenticated production Git APIs.
 
 ## Configuration
 
