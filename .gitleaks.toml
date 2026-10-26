@@ -1,0 +1,21 @@
+title = "Code Workspace public repository secret scanning"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Source file SHA-256 checksums in the recorded acceptance evidence"
+condition = "AND"
+paths = ['''^docs/evidence/2026-10-22-git/verification\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"src/(?:server/(?:auth\.test\.ts|services/auth-service\.ts)|web/api\.ts)": "[0-9a-f]{64}",?\s*$''']
+
+[[rules]]
+id = "hardcoded-production-password"
+description = "A production password must not have a hardcoded fallback"
+regex = '''appPassword\s*:\s*process\.env\.APP_PASSWORD[^\r\n]*\|\|\s*["'][^"'\r\n]+["']'''
+
+[[rules]]
+id = "personal-macos-path"
+description = "Use generic example paths in public content"
+regex = '''/(?:Users|Volumes)/[^\s"'`<>]+'''

@@ -15,7 +15,7 @@ module.exports = {
       max_restarts: 10,
       env: {
         NODE_ENV: "production",
-        HOST: "0.0.0.0",
+        HOST: process.env.HOST ?? "127.0.0.1",
         PORT: "43110"
       },
       out_file: "/tmp/code-workspace-pm2-out.log",

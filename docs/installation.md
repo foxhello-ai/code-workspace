@@ -18,6 +18,8 @@ winget install --id Git.Git -e
 
 服务默认仅监听 `127.0.0.1:43110`，不会暴露到局域网或互联网。
 
+生产环境不提供固定默认密码，未配置 `APP_PASSWORD` 时拒绝启动。脚本安装自动生成随机密码；曾经使用旧版默认密码的安装应立即修改配置并执行 `code-workspace restart`。升级保留现有密码，因此升级本身不会替换已使用的旧密码。
+
 ## 一条命令安装
 
 **macOS / Linux**：安装最新版、校验发布包、生成随机访问密码并启动服务：
@@ -39,13 +41,13 @@ macOS/Linux 密码保存在 `~/.config/code-workspace/config.env`；Windows 保�
 安装脚本从 GitHub Latest Release 的稳定下载地址获取发布包，并对下载内容执行 SHA-256 校验，不依赖 GitHub API 配额。需要安装指定版本时：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | CODE_WORKSPACE_VERSION=1.1.2 bash
+curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | CODE_WORKSPACE_VERSION=1.1.3 bash
 ```
 
 Windows 指定版本：
 
 ```powershell
-$env:CODE_WORKSPACE_VERSION = '1.1.2'
+$env:CODE_WORKSPACE_VERSION = '1.1.3'
 irm https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.ps1 | iex
 ```
 
@@ -107,11 +109,11 @@ Windows 配置使用 JSON：
 
 ## 发布维护者
 
-GitHub Actions 对 `main`、PR 和手动触发执行 Linux/macOS/Windows 三系统检查。推送与 `package.json` 版本完全一致的 tag 时，三个系统全部通过后才创建 Release。例如当前版本为 `1.1.2`：
+GitHub Actions 对 `main`、PR 和手动触发执行 Linux/macOS/Windows 三系统检查。推送与 `package.json` 版本完全一致的 tag 时，三个系统全部通过后才创建 Release。例如当前版本为 `1.1.3`：
 
 ```bash
-git tag v1.1.2
-git push origin v1.1.2
+git tag v1.1.3
+git push origin v1.1.3
 ```
 
 上面的 tag 命令仅用于演示流程。已发布 tag 不应覆盖；发布新内容时先更新 `package.json` 和 `package-lock.json` 的版本，再创建新 tag。推送 `main` 只运行验证，不公开 Release；一键安装取得的是最新已发布版本。

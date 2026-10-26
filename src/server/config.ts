@@ -24,5 +24,5 @@ export const config = {
   gitDiscoveryTimeoutMs: Number(process.env.GIT_DISCOVERY_TIMEOUT_MS ?? 5000),
   watchDebounceMs: Number(process.env.WATCH_DEBOUNCE_MS ?? 250),
   watchMaxFiles: Number(process.env.WATCH_MAX_FILES ?? 5000),
-  appPassword: process.env.APP_PASSWORD ?? (process.env.NODE_ENV === "test" ? "test-password" : passwordFromEnvFile() || "")
+  appPassword: process.env.APP_PASSWORD ?? (process.env.NODE_ENV === "test" ? "test-password" : passwordFromEnvFile())
 };

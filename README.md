@@ -36,6 +36,8 @@
 
 ## 开发运行
 
+启动前将 `.env.example` 复制为未提交的 `.env`，设置随机的 `APP_PASSWORD`。生产环境没有默认密码，缺少配置会拒绝启动；脚本安装会自动生成密码。
+
 ```bash
 npm install
 npm run dev
@@ -105,7 +107,7 @@ npm run pm2:logs
 npx pm2 status
 ```
 
-PM2 配置位于 `ecosystem.config.cjs`，服务异常退出后会自动重启，并固定监听 `0.0.0.0:43110`。
+PM2 配置位于 `ecosystem.config.cjs`，服务异常退出后会自动重启，默认仅监听 `127.0.0.1:43110`。
 
 ## Git 与 Worktree 更新
 
@@ -165,7 +167,7 @@ Windows 发布 ZIP 的验证命令见[安装文档](docs/installation.md)。同�
 | `GIT_DISCOVERY_TIMEOUT_MS` | `5000` | Git 仓库发现总超时 |
 | `WATCH_DEBOUNCE_MS` | `250` | Git 状态刷新防抖 |
 | `WATCH_MAX_FILES` | `5000` | 文件监听最大条目数，超过后自动关闭实时监听以保护 Git 查询 |
-| `APP_PASSWORD` | `` | 全局访问密码，可通过环境变量或未提交的 `.env` 覆盖 |
+| `APP_PASSWORD` | 必填，无默认值 | 通过环境变量或未提交的 `.env` 配置；安装脚本自动生成随机密码 |
 
 ## 安全边界
 
@@ -187,6 +189,8 @@ Windows 发布 ZIP 的验证命令见[安装文档](docs/installation.md)。同�
 - 不包含远程部署认证；如修改 `HOST` 对外监听，需要另行增加认证和 TLS。
 
 设计与实施资料见 [docs/detailed-design.md](docs/detailed-design.md)、[docs/task-plan.md](docs/task-plan.md)、[docs/acceptance-report.md](docs/acceptance-report.md) 和 [docs/backlog.md](docs/backlog.md)。
+
+公开仓库的敏感信息处理与历史清理说明见 [安全说明](docs/security-cleanup.md)。
 
 B-009 与 B-010 阶段 A、P13/P14 的界面优化已实现，需求与追溯见[子工作区 Git 需求](docs/change-request-subworkspace-git.md#11-2026-10-22-扩展需求基线)、[专项计划](docs/subworkspace-git-development-plan.md#4-2026-10-22-扩展实施计划)及[验收报告第 8～10 节](docs/acceptance-report.md#8-远程提交图与-worktree-扩展验收)。
 

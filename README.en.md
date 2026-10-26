@@ -79,14 +79,16 @@ code-workspace stop
 Logs and the PID file are stored in `~/.local/state/code-workspace`. Rerun the install command to install the latest release. It preserves configuration and passwords, stops the managed service, and starts the selected version. Previous version directories are retained. Save your edits before upgrading, as the service restarts. For a specific release, set `CODE_WORKSPACE_VERSION`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | CODE_WORKSPACE_VERSION=1.1.2 bash
+curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | CODE_WORKSPACE_VERSION=1.1.3 bash
 ```
 
-On Windows, set `$env:CODE_WORKSPACE_VERSION = '1.1.2'` before running the PowerShell installer. The same `start`, `status`, `logs`, `restart`, and `stop` commands are available on Windows; the command directory is added to your user PATH. Services run as the current user and do not automatically start after a reboot.
+On Windows, set `$env:CODE_WORKSPACE_VERSION = '1.1.3'` before running the PowerShell installer. The same `start`, `status`, `logs`, `restart`, and `stop` commands are available on Windows; the command directory is added to your user PATH. Services run as the current user and do not automatically start after a reboot.
 
 See the [installation guide, in Chinese](docs/installation.md) for configuration, upgrades, and release maintenance.
 
 ## Development
+
+Before starting, copy `.env.example` to an untracked `.env` file and set a random `APP_PASSWORD`. Production has no default password and refuses to start without configuration. Release installers generate a password automatically.
 
 ```bash
 npm install
@@ -122,7 +124,7 @@ npm run pm2:logs
 npx pm2 status
 ```
 
-The configuration in `ecosystem.config.cjs` restarts the service after unexpected exits and binds it to `0.0.0.0:43110`. This differs from the installer's loopback-only default.
+The configuration in `ecosystem.config.cjs` restarts the service after unexpected exits and defaults to `127.0.0.1:43110`.
 
 ## Git and Worktree updates
 
@@ -182,9 +184,11 @@ On Windows, set `CODE_WORKSPACE_TEST_ARCHIVE` to `release/code-workspace-<versio
 | `GIT_DISCOVERY_TIMEOUT_MS` | `5000` | Total repository discovery timeout. |
 | `WATCH_DEBOUNCE_MS` | `250` | Git status refresh debounce. |
 | `WATCH_MAX_FILES` | `5000` | File watcher limit; live watching is disabled above the limit to preserve Git queries. |
-| `APP_PASSWORD` | `` | Source-run access password; override via the environment or an untracked `.env`. The installer generates a random password. |
+| `APP_PASSWORD` | Required; no default | Configure through the environment or an untracked `.env` file. Installers generate a random password. |
 
 ## Security boundaries
+
+See [public repository security and history cleanup](docs/security-cleanup.md) for password rotation and existing clone guidance.
 
 - The default server and installer bind to loopback.
 - File APIs accept paths relative to the current workspace and block access to `.git` internals.
