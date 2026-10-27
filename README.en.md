@@ -66,6 +66,8 @@ The health endpoint should return `{"ok":true}`. The installer prints the genera
 
 On Windows, run `code-workspace status` and `Invoke-RestMethod http://127.0.0.1:43110/health`. Configuration is stored at `$env:LOCALAPPDATA\CodeWorkspace\config\config.json`, with access limited to the current account. Logs are in `state\server.log` under the same installation directory. Open a workspace using its Windows path, such as `D:\projects\my-project`.
 
+If an older Windows installer fails at `Set-Acl` with a missing `SeSecurityPrivilege`, rerun the online install command as the same Windows user. The corrected script updates only directory access permissions, preserves configuration and passwords, and requires no audit or ownership privileges. This script fix also applies when installing a specific release version.
+
 The default installation directory is `~/.local/share/code-workspace`; the command is linked to `~/.local/bin/code-workspace`. Add `~/.local/bin` to your `PATH` to use:
 
 ```bash

@@ -88,7 +88,14 @@ try {
     $acl.SetAccessRuleProtection($true, $false)
     $rule = New-Object Security.AccessControl.FileSystemAccessRule($identity, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
     $acl.AddAccessRule($rule)
-    Set-Acl -LiteralPath $configDirectory -AclObject $acl
+    # Persist only the changed DACL. Set-Acl copies the whole descriptor and
+    # can require SeSecurityPrivilege, especially on a protected reinstall.
+    $configDirectoryInfo = New-Object IO.DirectoryInfo($configDirectory)
+    if ($PSVersionTable.PSEdition -eq 'Core') {
+        [IO.FileSystemAclExtensions]::SetAccessControl($configDirectoryInfo, $acl)
+    } else {
+        $configDirectoryInfo.SetAccessControl($acl)
+    }
     if (-not (Test-Path -LiteralPath $configFile)) {
         $randomBytes = New-Object byte[] 24
         $generator = [Security.Cryptography.RandomNumberGenerator]::Create()

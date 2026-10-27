@@ -40,6 +40,8 @@ irm https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/in
 
 macOS/Linux 密码保存在 `~/.config/code-workspace/config.env`；Windows 保存在 `$env:LOCALAPPDATA\CodeWorkspace\config\config.json`，配置目录 ACL 仅允许当前 Windows 账户读取。在页面使用 `D:\projects\my-project` 等路径打开 Windows 本机目录。
 
+如果旧版 Windows 安装脚本在 `Set-Acl` 处报告缺少 `SeSecurityPrivilege`，在同一 Windows 账户下重新执行上面的在线安装命令即可。修复后的脚本仅写入配置目录的访问权限（DACL），不修改审计权限、所有者或所属组，不需要授予系统特权或切换管理员账户；已有配置和密码会保留。本次修复位于在线 `main/scripts/install.ps1`，也适用于安装指定版本的成品包。
+
 安装脚本从 GitHub Latest Release 的稳定下载地址获取发布包，并对下载内容执行 SHA-256 校验，不依赖 GitHub API 配额。需要安装指定版本时：
 
 ```bash
@@ -137,3 +139,5 @@ $version = node -p "require('./package.json').version"
 $env:CODE_WORKSPACE_TEST_ARCHIVE = "release/code-workspace-$version-windows-x64.zip"
 node --test scripts/install.test.mjs scripts/service-manager.test.mjs
 ```
+
+Windows 安装测试会在独立子进程中移除并检查 `SeSecurityPrivilege`、备份、恢复和取得所有权特权，再执行安装。首次安装、重复安装及升级还验证配置目录仅允许当前账户访问、配置文件继承该权限，并保留原密码、所有者和所属组。Windows 脚本检查分别使用 PowerShell 5.1 和 7；本地可设置 `$env:CODE_WORKSPACE_TEST_POWERSHELL = 'pwsh.exe'` 切换为 PowerShell 7。

@@ -88,6 +88,8 @@ curl -fsS http://127.0.0.1:43110/health
 
 Windows 安装后可直接运行 `code-workspace status`；通用管理命令为 `code-workspace start|status|logs|restart|stop`。Windows 配置保存在 `$env:LOCALAPPDATA\CodeWorkspace\config\config.json`，日志位于同一安装目录的 `state\server.log`。在页面输入 `D:\projects\my-project` 等 Windows 路径打开工作区。
 
+旧版 Windows 安装脚本若在 `Set-Acl` 处报缺少 `SeSecurityPrivilege`，请在同一账户下重新执行上面的在线安装命令。修复后的脚本只更新访问权限，无需管理员或审计特权，并保留已有配置和密码；安装指定版本时同样生效。详见[安装文档](docs/installation.md)。
+
 重新执行安装命令会保留配置和密码，停止原安装服务后启动所选版本；旧版本目录保留。升级会重启服务，请先保存编辑内容。
 
 ### PM2 持久运行

@@ -16,9 +16,15 @@ concurrency:
 
 jobs:
   windows-smoke:
-    name: Verify Windows installer scripts
+    name: Verify Windows installer scripts (${{ matrix.powershell }})
     runs-on: windows-latest
     timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        powershell: [powershell.exe, pwsh.exe]
+    env:
+      CODE_WORKSPACE_TEST_POWERSHELL: ${{ matrix.powershell }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const archiveFile = process.env.CODE_WORKSPACE_TEST_ARCHIVE;
 const windows = process.platform === "win32";
-const powershell = "powershell.exe";
+const powershell = process.env.CODE_WORKSPACE_TEST_POWERSHELL || "powershell.exe";
 const redact = text => text.replace(/^(?:访问密码：|Access password:).*$/gm, "Access password: [redacted]");
 
 function run(command, args, env, timeout = 45_000) {
@@ -107,7 +107,7 @@ async function harness(body) {
   const configPath = windows ? path.join(env.CODE_WORKSPACE_HOME, "config/config.json") : path.join(directory, "config/code-workspace/config.env");
   try {
     await body({ directory, env, port, url: `http://127.0.0.1:${port}`, cli, cliRun, configPath, setArchive(value) { archive = value; }, corruptChecksum() { corrupt = true; }, install: () => windows
-      ? run(powershell, ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", path.join(root, "scripts/install.ps1")], env, 90_000)
+      ? run(powershell, ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", path.join(root, "scripts/fixtures/install-without-acl-privileges.ps1"), "-Installer", path.join(root, "scripts/install.ps1")], env, 90_000)
       : run("sh", [path.join(root, "scripts/install.sh")], env, 90_000) });
   } finally {
     try {
@@ -120,6 +120,34 @@ async function harness(body) {
   }
 }
 
+async function windowsConfigAcl(env, configPath) {
+  const result = await run(powershell, ["-NoProfile", "-NonInteractive", "-Command", `
+$ErrorActionPreference = 'Stop'
+function Describe-Acl([string]$Path) {
+  $acl = Get-Acl -LiteralPath $Path
+  @{
+    protected = $acl.AreAccessRulesProtected
+    owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+    group = $acl.GetGroup([Security.Principal.SecurityIdentifier]).Value
+    rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | ForEach-Object {
+      @{ sid = $_.IdentityReference.Value; rights = [int]$_.FileSystemRights; inherited = $_.IsInherited; inheritance = [int]$_.InheritanceFlags }
+    })
+  }
+}
+@{
+  sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+  directory = Describe-Acl (Split-Path -Parent $env:CODE_WORKSPACE_TEST_CONFIG)
+  file = Describe-Acl $env:CODE_WORKSPACE_TEST_CONFIG
+} | ConvertTo-Json -Depth 5 -Compress
+`], { ...env, CODE_WORKSPACE_TEST_CONFIG: configPath });
+  assert.equal(result.code, 0, result.text);
+  const acl = JSON.parse(result.text.trim());
+  assert.equal(acl.directory.protected, true);
+  assert.deepEqual(acl.directory.rules, [{ sid: acl.sid, rights: 2032127, inherited: false, inheritance: 3 }]);
+  assert.deepEqual(acl.file.rules, [{ sid: acl.sid, rights: 2032127, inherited: true, inheritance: 0 }]);
+  return acl;
+}
+
 test("installer starts a fresh release, preserves config on reinstall, and runs the upgraded version", { timeout: 120_000 }, async () => {
   await harness(async h => {
     const oldArchive = await fixtureArchive(h.directory, "1.0.0");
@@ -130,10 +158,11 @@ test("installer starts a fresh release, preserves config on reinstall, and runs 
     assert.equal((await (await fetch(`${h.url}/health`)).json()).version, "1.0.0");
     const configPath = h.configPath;
     const config = await readFile(configPath, "utf8");
+    let originalAcl;
     if (windows) {
+      assert.match(result.text, /Verified: installer token has no security, backup, restore, or take-ownership privileges\./);
       assert.match(JSON.parse(config).APP_PASSWORD, /^[A-Za-z0-9_-]{32}$/);
-      const acl = await run(powershell, ["-NoProfile", "-NonInteractive", "-Command", "(Get-Acl -LiteralPath $env:CODE_WORKSPACE_TEST_CONFIG).AreAccessRulesProtected"], { ...h.env, CODE_WORKSPACE_TEST_CONFIG: path.dirname(configPath) });
-      assert.equal(acl.code, 0, acl.text); assert.match(acl.text, /True/);
+      originalAcl = await windowsConfigAcl(h.env, configPath);
     } else {
       assert.equal((await stat(configPath)).mode & 0o777, 0o600);
       assert.match(config, /APP_PASSWORD=[A-Za-z0-9_-]{32}/);
@@ -141,11 +170,13 @@ test("installer starts a fresh release, preserves config on reinstall, and runs 
     result = await h.install();
     assert.equal(result.code, 0, result.text);
     assert.equal(await readFile(configPath, "utf8"), config);
+    if (windows) assert.deepEqual(await windowsConfigAcl(h.env, configPath), originalAcl);
     h.setArchive(newArchive);
     result = await h.install();
     assert.equal(result.code, 0, result.text);
     assert.equal((await (await fetch(`${h.url}/health`)).json()).version, "1.0.1");
     assert.equal(await readFile(configPath, "utf8"), config);
+    if (windows) assert.deepEqual(await windowsConfigAcl(h.env, configPath), originalAcl);
     for (const command of ["status", "restart", "status", "stop", "start"]) {
       result = await h.cliRun(command, windows ? { ...h.env, CODE_WORKSPACE_HOME: "", HOST: "", PORT: "", APP_PASSWORD: "" } : h.env);
       assert.equal(result.code, 0, result.text);
