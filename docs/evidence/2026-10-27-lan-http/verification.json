@@ -1,0 +1,25 @@
+{
+  "release": "v1.1.4",
+  "regression": "LAN HTTP does not expose crypto.randomUUID",
+  "beforeFix": {
+    "regressionTestsFailed": 2,
+    "error": "crypto.randomUUID is not a function"
+  },
+  "afterFix": {
+    "applicationTestsPassed": 46,
+    "newSessionRegressionTestsPassed": 3,
+    "typecheck": "passed",
+    "productionBuild": "passed",
+    "browser": {
+      "browser": "Chrome/156.0.8078.48",
+      "origin": "http://code-workspace.test",
+      "secureContext": false,
+      "nativeRandomUUID": "undefined",
+      "cryptographicRandomValues": "function",
+      "sessionCreated": true,
+      "loginThroughUI": true,
+      "sessionPreserved": true,
+      "uncaughtErrors": 0
+    }
+  }
+}

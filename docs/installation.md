@@ -18,6 +18,8 @@ winget install --id Git.Git -e
 
 服务默认仅监听 `127.0.0.1:43110`，不会暴露到局域网或互联网。
 
+v1.1.4 修复了局域网 HTTP 页面缺少 `crypto.randomUUID` 导致无法发起请求的问题。会话 ID 在 HTTPS/localhost 优先使用原生 UUID 接口，局域网 HTTP 使用 `crypto.getRandomValues` 生成 UUID；两种方式均使用安全随机数。HTTPS 仍是远程访问的推荐配置，HTTP 不加密密码及文件内容。
+
 生产环境不提供固定默认密码，未配置 `APP_PASSWORD` 时拒绝启动。脚本安装自动生成随机密码；曾经使用旧版默认密码的安装应立即修改配置并执行 `code-workspace restart`。升级保留现有密码，因此升级本身不会替换已使用的旧密码。
 
 ## 一条命令安装
