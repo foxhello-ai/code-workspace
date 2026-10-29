@@ -1,0 +1,24 @@
+{
+  "service": "http://127.0.0.1:43110",
+  "isolatedSession": true,
+  "results": [
+    {
+      "path": "/regression/im-workspace",
+      "openMs": 8,
+      "firstTreeMs": 73,
+      "initializationReadyMs": 2305,
+      "repositories": 20,
+      "changedFiles": 13,
+      "treeEntries": 26
+    },
+    {
+      "path": "/regression/project-maikoo/",
+      "openMs": 3,
+      "firstTreeMs": 10,
+      "initializationReadyMs": 1031,
+      "repositories": 11,
+      "changedFiles": 0,
+      "treeEntries": 21
+    }
+  ]
+}

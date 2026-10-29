@@ -1,0 +1,101 @@
+{
+  "measuredAt": "2026-10-29T09:30:45.403Z",
+  "rounds": 3,
+  "checks": [
+    "validated open before initialization",
+    "root tree available during loading",
+    "lightweight initialization polling",
+    "all detailed statuses",
+    "exact repository and file counts",
+    "repository tree markers",
+    "nested directory expansion",
+    "Git internals hidden during and after initialization",
+    "session close"
+  ],
+  "results": [
+    {
+      "path": "/regression/im-workspace",
+      "repositories": 20,
+      "groups": 20,
+      "worktrees": 20,
+      "changedFiles": 13,
+      "discovery": {
+        "depth": 1,
+        "maxDirs": 200,
+        "timedOut": false,
+        "truncated": false,
+        "checkedDirs": 24
+      },
+      "samples": [
+        {
+          "openMs": 50,
+          "treeReadyMs": 106,
+          "initializationReadyMs": 1828,
+          "expandMs": 192,
+          "signature": "f44f7d606f04328cb2bf46b3b817bcade57c049f41964f6613314455f24e3d28"
+        },
+        {
+          "openMs": 7,
+          "treeReadyMs": 11,
+          "initializationReadyMs": 947,
+          "expandMs": 372,
+          "signature": "f44f7d606f04328cb2bf46b3b817bcade57c049f41964f6613314455f24e3d28"
+        },
+        {
+          "openMs": 4,
+          "treeReadyMs": 7,
+          "initializationReadyMs": 903,
+          "expandMs": 326,
+          "signature": "f44f7d606f04328cb2bf46b3b817bcade57c049f41964f6613314455f24e3d28"
+        }
+      ],
+      "medianOpenMs": 7,
+      "medianTreeReadyMs": 11,
+      "medianInitializationReadyMs": 947,
+      "medianExpandMs": 326,
+      "consistentAcrossRounds": true
+    },
+    {
+      "path": "/regression/project-maikoo/",
+      "repositories": 11,
+      "groups": 1,
+      "worktrees": 11,
+      "changedFiles": 0,
+      "discovery": {
+        "depth": 1,
+        "maxDirs": 200,
+        "timedOut": false,
+        "truncated": false,
+        "checkedDirs": 14
+      },
+      "samples": [
+        {
+          "openMs": 3,
+          "treeReadyMs": 8,
+          "initializationReadyMs": 680,
+          "expandMs": 34,
+          "signature": "600ae77aceeaba6b992492124f9c3cb2e8c9ab36587a8fb2a4bb22d11ac1a3ee"
+        },
+        {
+          "openMs": 3,
+          "treeReadyMs": 5,
+          "initializationReadyMs": 378,
+          "expandMs": 33,
+          "signature": "600ae77aceeaba6b992492124f9c3cb2e8c9ab36587a8fb2a4bb22d11ac1a3ee"
+        },
+        {
+          "openMs": 3,
+          "treeReadyMs": 6,
+          "initializationReadyMs": 364,
+          "expandMs": 34,
+          "signature": "600ae77aceeaba6b992492124f9c3cb2e8c9ab36587a8fb2a4bb22d11ac1a3ee"
+        }
+      ],
+      "medianOpenMs": 3,
+      "medianTreeReadyMs": 6,
+      "medianInitializationReadyMs": 378,
+      "medianExpandMs": 34,
+      "consistentAcrossRounds": true
+    }
+  ]
+}

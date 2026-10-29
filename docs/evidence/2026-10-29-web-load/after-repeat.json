@@ -1,0 +1,114 @@
+{
+  "origin": "https://workspace.foxhello.cn/",
+  "loginMs": 7501,
+  "assets": [
+    {
+      "path": "/assets/index-BuWlzUZ1.js",
+      "status": 200,
+      "type": "application/javascript; charset=utf-8",
+      "cacheControl": "public, max-age=31536000, immutable",
+      "cfCacheStatus": "HIT",
+      "contentEncoding": "br"
+    }
+  ],
+  "navigation": {
+    "name": "https://workspace.foxhello.cn/",
+    "entryType": "navigation",
+    "startTime": 0,
+    "duration": 6636.0999999940395,
+    "navigationId": 9729,
+    "initiatorType": "navigation",
+    "deliveryType": "",
+    "nextHopProtocol": "h2",
+    "renderBlockingStatus": "non-blocking",
+    "contentType": "text/html",
+    "contentEncoding": "zstd",
+    "workerStart": 0,
+    "workerRouterEvaluationStart": 0,
+    "workerCacheLookupStart": 0,
+    "workerMatchedSourceType": "",
+    "workerFinalSourceType": "",
+    "redirectStart": 0,
+    "redirectEnd": 0,
+    "fetchStart": 5.899999976158142,
+    "domainLookupStart": 5.899999976158142,
+    "domainLookupEnd": 5.899999976158142,
+    "connectStart": 1234.5,
+    "secureConnectionStart": 1235.699999988079,
+    "connectEnd": 2635.7999999821186,
+    "requestStart": 2635.899999976158,
+    "responseStart": 3909.5,
+    "firstInterimResponseStart": 0,
+    "finalResponseHeadersStart": 3909.5,
+    "responseEnd": 4339.199999988079,
+    "transferSize": 1966,
+    "encodedBodySize": 1666,
+    "decodedBodySize": 3200,
+    "responseStatus": 200,
+    "serverTiming": [
+      {
+        "name": "cfCacheStatus",
+        "duration": 0,
+        "description": "DYNAMIC"
+      },
+      {
+        "name": "cfEdge",
+        "duration": 49,
+        "description": ""
+      },
+      {
+        "name": "cfOrigin",
+        "duration": 942,
+        "description": ""
+      }
+    ],
+    "unloadEventStart": 0,
+    "unloadEventEnd": 0,
+    "domInteractive": 4342,
+    "domContentLoadedEventStart": 6635.799999982119,
+    "domContentLoadedEventEnd": 6635.899999976158,
+    "domComplete": 6636.0999999940395,
+    "loadEventStart": 6636.0999999940395,
+    "loadEventEnd": 6636.0999999940395,
+    "type": "navigate",
+    "redirectCount": 0,
+    "activationStart": 0,
+    "criticalCHRestart": 0,
+    "notRestoredReasons": null,
+    "confidence": {
+      "randomizedTriggerRate": 0.4994798,
+      "value": "high"
+    }
+  },
+  "paint": [
+    {
+      "name": "first-paint",
+      "entryType": "paint",
+      "startTime": 4412,
+      "duration": 0,
+      "navigationId": 9729,
+      "paintTime": 4367.5999999940395,
+      "presentationTime": 4412
+    },
+    {
+      "name": "first-contentful-paint",
+      "entryType": "paint",
+      "startTime": 4412,
+      "duration": 0,
+      "navigationId": 9729,
+      "paintTime": 4367.5999999940395,
+      "presentationTime": 4412
+    }
+  ],
+  "resources": [
+    {
+      "url": "https://workspace.foxhello.cn/assets/index-BuWlzUZ1.js",
+      "duration": 1766,
+      "transferSize": 61112,
+      "encodedBodySize": 60812,
+      "decodedBodySize": 202402,
+      "initiatorType": "script"
+    }
+  ],
+  "errors": []
+}

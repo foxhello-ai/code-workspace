@@ -21,9 +21,10 @@ It does not start terminals, Codex sessions, or AI services. External tools can 
 - Explore commit graphs with branches, merges, tags, refs, and Worktree HEAD markers.
 - View history in fullscreen, locate the local HEAD, and compare local and remote ancestry and upstream ahead/behind counts.
 - Use the same all/current Worktree/selected ref scope in graph and list views, with versioned pagination and loading progress.
-- Browse Worktrees grouped by Git address and local common-dir base, with multiple remote addresses, global counts, main/current markers, state ordering, and details on demand.
+- Browse Worktrees grouped by Git address and local repository, with directory/branch search, repository filters, global counts, and inline details.
 - Preview Worktree cleanup conditions without removing Worktrees; protect Worktree roots from ordinary deletion or renaming.
 - Compare HEAD, the index, working files, and individual commit files, including multi-file commit diffs.
+- Use a dedicated Git workbench with inline file diffs and commit details, preserving the current view when switching modules.
 - Apply UTF-8, binary file, large file, and path access protections.
 
 ## Requirements
@@ -128,28 +129,39 @@ npx pm2 status
 
 The configuration in `ecosystem.config.cjs` restarts the service after unexpected exits and defaults to `127.0.0.1:43110`.
 
+## Opening a workspace
+
+Once the directory is validated as readable, the workspace opens and loads its file tree. Git discovery, Worktree registration, file watching, and change counts initialize in the background. Files can be viewed and edited immediately; Git and Worktree views show the loading phase and update automatically. Failed initialization can be retried without losing open files, and switching workspaces during loading is supported. Renaming and deletion wait for Git initialization to protect Worktree roots.
+
 ## Git and Worktree updates
 
 ### Complete history and local/remote comparisons
 
-1. Open **Git history** and choose **Sync remotes** to retrieve new branches and commits from configured remotes. A normal refresh only rereads local data.
+1. Open **Git → Commit history** and choose **Fetch remotes** to retrieve branches and commits from the selected local repository's configured remotes. **Refresh status** only rereads local data.
 2. Select **All / Current Worktree / Selected ref** in graph or list mode, and load more commits as needed. Changing the displayed scope does not check out a branch.
 3. Enter fullscreen to expand the history view. Press `Esc` or use the exit button to return; the scope, loaded commits, and selection are preserved.
-4. Use the highlighted **local HEAD**, local/remote ancestry labels, and upstream ahead/behind counts to compare histories. Select a commit to inspect its files and open individual or all file diffs.
+4. Use the highlighted **local HEAD**, local/remote ancestry labels, and upstream ahead/behind counts to compare histories. Select a commit to inspect its files and expand individual or all file diffs below the graph.
+5. **Working changes** groups conflicted, staged, unstaged, and untracked files. Select a file for unified or side-by-side diffs; staged and working changes to the same file have separate comparisons. File selection, history scope, and loaded commits persist when switching Git tabs or the Worktree module.
 
 Remote comparisons use fetched local refs. Missing upstreams, shallow history, and query failures retain explicit unknown states. Fetch results are held in memory and reset when the server restarts.
 
 ### Worktrees grouped by Git address
 
 - Global counters show all Worktrees and modified, clean, and unknown counts. Filtering does not change the global totals.
-- The hierarchy is **Git remote address → local base (common-dir) → Worktree**. Remote addresses and base paths are visible directly. Independent clones with the same address retain separate bases and main workspaces; linked Worktrees appear under their own base.
+- The hierarchy is **Git remote address → local repository (common-dir) → Worktree**. Independent clones with the same address remain separate local repositories, distinguished by name and path, each containing its main workspace and linked Worktrees. Expand details to see full addresses and paths.
 - The first `origin` fetch URL is preferred. Additional fetch/push addresses can be expanded. URL credentials are hidden; missing remotes and address lookup failures have separate messages.
-- Address groups and bases with modifications appear first. Within a base, rows are ordered **modified → clean → unknown**. Compact rows show the branch, file state, and unpublished commit count; details open when a row is selected.
+- Filter repositories in the sidebar and search directories or branches. Groups and local repositories with modifications appear first, with rows ordered **modified → clean → unknown**. Compact rows show branch, file state, and unpublished commits; selected details appear alongside the list and stack below it on narrow screens.
 - **Main workspace** and **Current** markers are separate. Details can locate a commit, show independent changes, or open a read-only cleanup preview.
 
 A clean working directory and published commits are separate states. Actual Worktree removal is planned for a later phase. Different SSH/HTTPS forms are not automatically treated as the same remote.
 
-Screenshots: [fullscreen history](docs/evidence/2026-10-22-git-ui/history-fullscreen.jpg) and [Git address groups](docs/evidence/2026-10-22-git-address/address-groups.jpg).
+Screenshots: [Worktree overview and details](docs/evidence/2026-10-29-workbench/worktree.png), [working changes](docs/evidence/2026-10-29-workbench/changes.png), [commit history](docs/evidence/2026-10-29-workbench/history.png), and [narrow layout](docs/evidence/2026-10-29-workbench/worktree-mobile.png).
+
+## Public website loading and caching
+
+The login entry loads authentication UI only. Workspace code loads after authentication; Monaco and its language workers load when a text editor or diff is first opened. HTML includes a loading screen, with loading and failure states for deferred modules.
+
+Production builds generate Brotli and gzip versions of JS/CSS. Hashed assets use `public, max-age=31536000, immutable`, HTML uses `no-cache`, and APIs use `no-store`. Cloudflare rules should respect these headers and limit caching to public static assets; API and WebSocket traffic continues to the origin.
 
 ## Verification
 

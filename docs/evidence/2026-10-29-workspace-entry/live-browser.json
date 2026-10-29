@@ -1,0 +1,32 @@
+{
+  "results": [
+    {
+      "path": "/regression/im-workspace",
+      "shellMs": 20,
+      "loadingAtEntry": true,
+      "treeMs": 706,
+      "readyMs": 4278,
+      "openedFile": "AGENTS.md",
+      "repositoryCount": 20,
+      "changedFiles": 13
+    },
+    {
+      "path": "/regression/project-maikoo/",
+      "shellMs": 47,
+      "loadingAtEntry": true,
+      "treeMs": 126,
+      "readyMs": 2119,
+      "openedFile": "AGENTS.md",
+      "repositoryCount": 11,
+      "changedFiles": 0
+    }
+  ],
+  "runtimeErrors": [],
+  "checks": [
+    "shell before Git initialization",
+    "file tree available during initialization",
+    "opened file retained after initialization",
+    "Worktree and Git usable after initialization",
+    "invalid path remains on open page"
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "date": "2026-10-29",
+  "measurement": "Single browser run per directory, recent workspace summaries enabled, click open until root tree visible. OS cache and concurrent disk activity affect timings.",
+  "comparison": [
+    {
+      "path": "/regression/im-workspace",
+      "repositories": 20,
+      "changedFiles": 13,
+      "before": {
+        "openMs": 3183,
+        "treeReadyMs": 4507
+      },
+      "after": {
+        "openMs": 2343,
+        "treeReadyMs": 3168
+      },
+      "treeReadyReductionPercent": 30,
+      "repositoryAndTreeResultsUnchanged": true
+    },
+    {
+      "path": "/regression/project-maikoo/",
+      "repositories": 11,
+      "changedFiles": 0,
+      "before": {
+        "openMs": 1596,
+        "treeReadyMs": 1803
+      },
+      "after": {
+        "openMs": 1258,
+        "treeReadyMs": 1449
+      },
+      "treeReadyReductionPercent": 20,
+      "repositoryAndTreeResultsUnchanged": true
+    }
+  ],
+  "runtimeErrors": [],
+  "candidateSourceDigest": "fce483f03ddcfccc0043e349a7d0c05c64d287dd6ff0ca5e5c2ddc60ed6b5551"
+}

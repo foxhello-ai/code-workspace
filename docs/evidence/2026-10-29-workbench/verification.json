@@ -1,0 +1,20 @@
+{
+  "date": "2026-10-29",
+  "applicationUrl": "http://127.0.0.1:43111",
+  "fixture": "temporary local bare remote, independent clone, linked/external/missing worktrees",
+  "checks": [
+    "live API data",
+    "index and working copy separation",
+    "selection across modules",
+    "current and occupied branch protection",
+    "confirmed checkout preserves staged, unstaged and untracked files",
+    "read-only cleanup preview",
+    "commit diff retains graph",
+    "versioned history pagination",
+    "fullscreen Escape",
+    "Worktree, changes and history layouts at 320–1440px without page overflow",
+    "missing directory",
+    "external worktree read-only"
+  ],
+  "runtimeErrors": []
+}

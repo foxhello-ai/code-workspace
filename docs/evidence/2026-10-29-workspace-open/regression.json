@@ -1,0 +1,92 @@
+{
+  "measuredAt": "2026-10-29T08:47:54.717Z",
+  "rounds": 3,
+  "checks": [
+    "open",
+    "root tree",
+    "all detailed statuses",
+    "exact repository and file counts",
+    "repository tree markers",
+    "nested directory expansion",
+    "Git internals hidden",
+    "session close"
+  ],
+  "results": [
+    {
+      "path": "/regression/im-workspace",
+      "repositories": 20,
+      "groups": 20,
+      "worktrees": 20,
+      "changedFiles": 13,
+      "discovery": {
+        "depth": 1,
+        "maxDirs": 200,
+        "timedOut": false,
+        "truncated": false,
+        "checkedDirs": 24
+      },
+      "samples": [
+        {
+          "openMs": 1967,
+          "treeReadyMs": 2432,
+          "expandMs": 212,
+          "signature": "f44f7d606f04328cb2bf46b3b817bcade57c049f41964f6613314455f24e3d28"
+        },
+        {
+          "openMs": 969,
+          "treeReadyMs": 1554,
+          "expandMs": 331,
+          "signature": "f44f7d606f04328cb2bf46b3b817bcade57c049f41964f6613314455f24e3d28"
+        },
+        {
+          "openMs": 1102,
+          "treeReadyMs": 1703,
+          "expandMs": 94,
+          "signature": "f44f7d606f04328cb2bf46b3b817bcade57c049f41964f6613314455f24e3d28"
+        }
+      ],
+      "medianOpenMs": 1102,
+      "medianTreeReadyMs": 1703,
+      "medianExpandMs": 212,
+      "consistentAcrossRounds": true
+    },
+    {
+      "path": "/regression/project-maikoo/",
+      "repositories": 11,
+      "groups": 1,
+      "worktrees": 11,
+      "changedFiles": 0,
+      "discovery": {
+        "depth": 1,
+        "maxDirs": 200,
+        "timedOut": false,
+        "truncated": false,
+        "checkedDirs": 14
+      },
+      "samples": [
+        {
+          "openMs": 695,
+          "treeReadyMs": 761,
+          "expandMs": 31,
+          "signature": "600ae77aceeaba6b992492124f9c3cb2e8c9ab36587a8fb2a4bb22d11ac1a3ee"
+        },
+        {
+          "openMs": 362,
+          "treeReadyMs": 442,
+          "expandMs": 33,
+          "signature": "600ae77aceeaba6b992492124f9c3cb2e8c9ab36587a8fb2a4bb22d11ac1a3ee"
+        },
+        {
+          "openMs": 367,
+          "treeReadyMs": 442,
+          "expandMs": 33,
+          "signature": "600ae77aceeaba6b992492124f9c3cb2e8c9ab36587a8fb2a4bb22d11ac1a3ee"
+        }
+      ],
+      "medianOpenMs": 367,
+      "medianTreeReadyMs": 442,
+      "medianExpandMs": 33,
+      "consistentAcrossRounds": true
+    }
+  ]
+}

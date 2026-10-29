@@ -1,0 +1,26 @@
+{
+  "origin": "https://workspace.foxhello.cn/",
+  "baselineSamples": 1,
+  "afterSamples": 3,
+  "baselineLoginMs": 8410,
+  "afterLoginMs": [
+    4681,
+    7501,
+    5844
+  ],
+  "medianAfterLoginMs": 5844,
+  "baselineFCPms": 6464,
+  "afterFCPms": [
+    1580,
+    4412,
+    3656
+  ],
+  "baselineLoginAssetTransferBytes": 1009081,
+  "afterLoginAssetTransferBytes": 60812,
+  "edgeCacheResults": [
+    "MISS",
+    "HIT",
+    "HIT"
+  ],
+  "note": "Fresh browser contexts on one machine; network and edge state vary. Baseline has one sample, so latency results are descriptive rather than a controlled multi-region benchmark."
+}

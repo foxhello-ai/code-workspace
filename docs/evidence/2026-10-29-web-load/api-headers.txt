@@ -1,0 +1,5 @@
+HTTP/1.1 200 Connection established
+HTTP/2 200
+content-type: application/json; charset=utf-8
+cache-control: no-store
+cf-cache-status: DYNAMIC

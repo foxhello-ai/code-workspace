@@ -1,0 +1,40 @@
+{
+  "origin": "http://127.0.0.1:43111",
+  "checks": [
+    "HTML loading screen visible while entry JS is blocked",
+    "Login downloads only bootstrap JS",
+    "Authenticated workspace loads without Monaco",
+    "Both real directories open correctly without loading editor",
+    "Deferred editor and TypeScript worker load locally; editing and autosave work",
+    "Git diff and module switching preserve editor disposal behavior",
+    "Logout returns to login form"
+  ],
+  "loginAssets": [
+    "/assets/index-BuWlzUZ1.js"
+  ],
+  "directoryResults": [
+    {
+      "path": "/regression/im-workspace",
+      "repositories": 20,
+      "changedFiles": 13
+    },
+    {
+      "path": "/regression/project-maikoo/",
+      "repositories": 11,
+      "changedFiles": 0
+    }
+  ],
+  "assets": [
+    "/assets/index-BuWlzUZ1.js",
+    "/assets/WorkspaceRoot-4mVyV-hS.js",
+    "/assets/WorkspaceRoot-DNFpTCgj.css",
+    "/assets/EditorRuntime-_J8JTZ0e.js",
+    "/assets/EditorRuntime-xnhJeWAr.css",
+    "/assets/typescript-B7ncwY6i.js",
+    "/assets/tsMode-CelVaJ2Z.js",
+    "/assets/ts.worker-Bij5J2kb.js",
+    "/assets/editor.worker-B4pQIWZD.js",
+    "/assets/codicon-DCmgc-ay.ttf"
+  ],
+  "runtimeErrors": []
+}

@@ -1,0 +1,24 @@
+{
+  "origin": "https://workspace.foxhello.cn",
+  "checks": [
+    "HTTPS login and secure HttpOnly cookie",
+    "workspace loads only after authentication",
+    "editor loads only when opening file",
+    "Monaco renders over HTTPS",
+    "WebSocket uses WSS through public hostname",
+    "workspace close succeeds"
+  ],
+  "assets": [
+    "https://workspace.foxhello.cn/assets/index-BuWlzUZ1.js",
+    "https://workspace.foxhello.cn/assets/WorkspaceRoot-4mVyV-hS.js",
+    "https://workspace.foxhello.cn/assets/WorkspaceRoot-DNFpTCgj.css",
+    "https://workspace.foxhello.cn/assets/EditorRuntime-_J8JTZ0e.js",
+    "https://workspace.foxhello.cn/assets/EditorRuntime-xnhJeWAr.css",
+    "https://workspace.foxhello.cn/assets/typescript-B7ncwY6i.js",
+    "https://workspace.foxhello.cn/assets/tsMode-CelVaJ2Z.js",
+    "https://workspace.foxhello.cn/assets/editor.worker-B4pQIWZD.js",
+    "https://workspace.foxhello.cn/assets/ts.worker-Bij5J2kb.js"
+  ],
+  "websocketCount": 1,
+  "runtimeErrors": []
+}
