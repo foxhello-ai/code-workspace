@@ -18,6 +18,8 @@ winget install --id Git.Git -e
 
 服务默认仅监听 `127.0.0.1:43110`，不会暴露到局域网或互联网。
 
+v1.2.0 更新 Git / Worktree 工作台，打开目录后先进入界面再后台初始化，并将登录、工作区和编辑器按需加载。具体变更见[更新日志](../CHANGELOG.md)。已有用户重复执行下面的安装命令即可升级，配置和密码会保留。
+
 v1.1.4 修复了局域网 HTTP 页面缺少 `crypto.randomUUID` 导致无法发起请求的问题。会话 ID 在 HTTPS/localhost 优先使用原生 UUID 接口，局域网 HTTP 使用 `crypto.getRandomValues` 生成 UUID；两种方式均使用安全随机数。HTTPS 仍是远程访问的推荐配置，HTTP 不加密密码及文件内容。
 
 生产环境不提供固定默认密码，未配置 `APP_PASSWORD` 时拒绝启动。脚本安装自动生成随机密码；曾经使用旧版默认密码的安装应立即修改配置并执行 `code-workspace restart`。升级保留现有密码，因此升级本身不会替换已使用的旧密码。
@@ -45,13 +47,13 @@ macOS/Linux 密码保存在 `~/.config/code-workspace/config.env`；Windows 保�
 安装脚本从 GitHub Latest Release 的稳定下载地址获取发布包，并对下载内容执行 SHA-256 校验，不依赖 GitHub API 配额。需要安装指定版本时：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | CODE_WORKSPACE_VERSION=1.1.3 bash
+curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | CODE_WORKSPACE_VERSION=1.2.0 bash
 ```
 
 Windows 指定版本：
 
 ```powershell
-$env:CODE_WORKSPACE_VERSION = '1.1.3'
+$env:CODE_WORKSPACE_VERSION = '1.2.0'
 irm https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.ps1 | iex
 ```
 
@@ -113,11 +115,11 @@ Windows 配置使用 JSON：
 
 ## 发布维护者
 
-GitHub Actions 对 `main`、PR 和手动触发执行 Linux/macOS/Windows 三系统检查。推送与 `package.json` 版本完全一致的 tag 时，三个系统全部通过后才创建 Release。例如当前版本为 `1.1.3`：
+GitHub Actions 对 `main`、PR 和手动触发执行 Linux/macOS/Windows 三系统检查。推送与 `package.json` 版本完全一致的 tag 时，三个系统全部通过后才创建 Release。例如当前版本为 `1.2.0`：
 
 ```bash
-git tag v1.1.3
-git push origin v1.1.3
+git tag v1.2.0
+git push origin v1.2.0
 ```
 
 上面的 tag 命令仅用于演示流程。已发布 tag 不应覆盖；发布新内容时先更新 `package.json` 和 `package-lock.json` 的版本，再创建新 tag。推送 `main` 只运行验证，不公开 Release；一键安装取得的是最新已发布版本。
