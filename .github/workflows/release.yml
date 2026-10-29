@@ -108,6 +108,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           pattern: release-*
@@ -119,4 +120,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          gh release create "$RELEASE_TAG" release/*.tar.gz release/*.zip release/*.sha256 --title "Code Workspace $RELEASE_TAG" --generate-notes
+          notes="docs/releases/$RELEASE_TAG.md"
+          if [ -f "$notes" ]; then
+            gh release create "$RELEASE_TAG" release/*.tar.gz release/*.zip release/*.sha256 --title "Code Workspace $RELEASE_TAG" --notes-file "$notes"
+          else
+            gh release create "$RELEASE_TAG" release/*.tar.gz release/*.zip release/*.sha256 --title "Code Workspace $RELEASE_TAG" --generate-notes
+          fi

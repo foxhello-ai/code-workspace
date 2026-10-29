@@ -1,0 +1,37 @@
+name: Update stable release notes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/releases/**"
+      - ".github/workflows/release-notes.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update notes for an existing stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="v$(node -p 'require("./package.json").version')"
+          notes="docs/releases/$tag.md"
+          if [ ! -f "$notes" ]; then
+            echo "No release notes file for $tag."
+            exit 0
+          fi
+          if ! state="$(gh release view "$tag" --json isDraft,isPrerelease --jq 'select(.isDraft == false and .isPrerelease == false) | "stable"')"; then
+            echo "Release $tag is not available yet; its publishing workflow will use the notes file."
+            exit 0
+          fi
+          if [ "$state" = "stable" ]; then
+            gh release edit "$tag" --notes-file "$notes"
+          fi
