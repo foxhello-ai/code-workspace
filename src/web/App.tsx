@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import Editor from "@monaco-editor/react";
+import { useEffect, useRef, useState } from "react";
+import Editor from "./CodeEditor";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, ChevronDown, ChevronRight, ChevronsRight, Clock3, Copy, ExternalLink, File, Folder, FolderOpen, GitBranch, GitFork, History, List, LockKeyhole, LogOut, RefreshCw, Save, Search, X, Files, GitCompare, Layers2, Plus, Trash2, XCircle } from "lucide-react";
-import type { DiffDocument, FileTreeEntry, GitBranchInfo, GitChangedFile, GitCommitDetail, GitCommitSummary, GitGraphCommit, GitRepositoryInfo, GitWorktree, WorkspaceChangeSummary } from "../shared/contracts";
+import { ArrowRight, ChevronDown, ChevronRight, ChevronsRight, Clock3, Copy, ExternalLink, File, Folder, FolderOpen, GitBranch, GitFork, LogOut, RefreshCw, Save, Search, X, Files, Layers2, Plus, Trash2, XCircle } from "lucide-react";
+import type { FileTreeEntry, GitBranchInfo, GitRepositoryInfo, GitWorktree, WorkspaceChangeSummary, WorkspaceInfo } from "../shared/contracts";
 import { DiffViewer } from "./DiffViewer";
-import { HistoryPanel, WorktreePanel } from "./GitPanels";
+import { WorktreePanel } from "./GitPanels";
+import { GitWorkspace, RepositorySidebar } from "./GitWorkspace";
 import { api, ApiClientError, apiSessionId } from "./api";
 import { type TextTab, useAppStore } from "./store";
 
@@ -27,10 +28,15 @@ function loadSidebarWidth() {
   return Number.isFinite(value) ? Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, value)) : DEFAULT_SIDEBAR_WIDTH;
 }
 
-export function App() {
+export function App({ onLogout = () => undefined }: { onLogout?: () => void }) {
   const store = useAppStore();
   const queryClient = useQueryClient();
   const [view, setView] = useState<View>("files");
+  const [lastGitView, setLastGitView] = useState<"changes" | "history">("changes");
+  const [repositoryScope, setRepositoryScope] = useState("all");
+  const [historyWorktree, setHistoryWorktree] = useState<GitWorktree>();
+  const [worktreeFocusRequest, setWorktreeFocusRequest] = useState(0);
+  const [historyFocusRequest, setHistoryFocusRequest] = useState(0);
   const [focusHash, setFocusHash] = useState<string>();
   const [focusWorktree, setFocusWorktree] = useState<string>();
   const [watchNotice, setWatchNotice] = useState("");
@@ -38,20 +44,42 @@ export function App() {
   const [notice, setNotice] = useState("");
   const [recentWorkspaces, setRecentWorkspaces] = useState<string[]>(loadRecentWorkspaces);
   const [switchingWorkspace, setSwitchingWorkspace] = useState(false);
-  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth);
+  const [workspaceLoadError, setWorkspaceLoadError] = useState("");
+  const workspaceRequest = useRef(0);
   const active = store.tabs.find((tab) => tab.id === store.activeId) ?? null;
   const currentRepository = store.workspace?.git ?? null;
+  const initialization = store.workspace?.initialization;
+  const gitReady = !initialization || initialization.status === "ready";
 
   useEffect(() => {
-    api.authStatus().then(({ authenticated }) => {
-      setAuthenticated(authenticated);
-      if (authenticated) api.workspace().then((workspace) => { store.setWorkspace(workspace); rememberWorkspace(workspace.rootPath); }).catch(() => undefined);
-    }).catch(() => setAuthenticated(false));
-    const requireAuth = () => { store.clear(); queryClient.clear(); setAuthenticated(false); };
-    window.addEventListener("code-workspace:auth-required", requireAuth);
-    return () => window.removeEventListener("code-workspace:auth-required", requireAuth);
+    let active = true;
+    const request = workspaceRequest.current;
+    api.workspaceSnapshot().then((workspace) => { if (active && request === workspaceRequest.current) { store.setWorkspace(workspace); rememberWorkspace(workspace.rootPath); } }).catch(() => undefined);
+    return () => { active = false; ++workspaceRequest.current; };
   }, []);
+  useEffect(() => {
+    if (initialization?.status !== "loading") return;
+    const id = initialization.id;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const workspace = await api.workspaceSnapshot();
+        if (cancelled || useAppStore.getState().workspace?.initialization?.id !== id || workspace.initialization?.id !== id) return;
+        setWorkspaceLoadError("");
+        store.setWorkspace(workspace);
+        if (workspace.initialization.status !== "loading") {
+          void queryClient.invalidateQueries({ queryKey: ["tree"] });
+          void queryClient.invalidateQueries({ queryKey: ["git"] });
+          return;
+        }
+      } catch (error) { if (!cancelled) setWorkspaceLoadError(`加载状态读取失败：${message(error)}`); }
+      if (!cancelled) timer = setTimeout(poll, 300);
+    };
+    void poll();
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [initialization?.id, initialization?.status]);
   useEffect(() => {
     if (!store.workspace) return;
     const send = () => {
@@ -76,7 +104,9 @@ export function App() {
     if (!store.workspace) return;
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(`${protocol}//${location.host}/api/events?workspaceId=${store.workspace.id}&sessionId=${encodeURIComponent(apiSessionId())}`);
+    let connected = true;
     ws.onmessage = async ({ data }) => {
+      if (!connected) return;
       const envelope = JSON.parse(data);
       const event = envelope.event;
       if (!event) { if (envelope.type === "workspace.resyncRequired") { queryClient.invalidateQueries(); store.markDiffsStale(); } return; }
@@ -85,19 +115,19 @@ export function App() {
         const tab = store.tabs.find((t) => (t.type === "text" || t.type === "image") && t.path === event.path);
         if (tab) {
           if (event.type === "file.deleted") tab.type === "image" ? store.refreshImage(event.path, null) : store.external(event.path, null);
-          else api.file(event.path).then((file) => tab.type === "image" ? store.refreshImage(event.path!, file) : store.external(event.path!, file)).catch(() => undefined);
+          else api.file(event.path).then((file) => { if (connected) tab.type === "image" ? store.refreshImage(event.path!, file) : store.external(event.path!, file); }).catch(() => undefined);
         }
       }
       if (event.type.startsWith("watcher.")) setWatchNotice("部分监听不可用，请使用刷新本地快照读取最新状态");
       if (event.type.startsWith("directory.")) queryClient.invalidateQueries({ queryKey: ["tree"] });
       if (event.type.startsWith("git.")) {
         queryClient.invalidateQueries({ queryKey: ["git"] });
-        api.workspace().then((workspace) => store.setWorkspace(workspace)).catch(() => undefined);
+        api.workspace().then((workspace) => { if (useAppStore.getState().workspace?.initialization?.id === workspace.initialization?.id) store.setWorkspace(workspace); }).catch(() => undefined);
         store.markDiffsStale();
       }
     };
-    return () => ws.close();
-  }, [store.workspace?.id]);
+    return () => { connected = false; ws.close(); };
+  }, [store.workspace?.id, store.workspace?.openedAt]);
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
       const activeId = useAppStore.getState().activeId;
@@ -137,13 +167,16 @@ export function App() {
   async function openWorkspace(pathOverride?: string) {
     const target = (pathOverride ?? workspacePath).trim();
     if (!target) return setNotice("请输入工作区路径");
+    if (switchingWorkspace) return;
+    ++workspaceRequest.current;
     setSwitchingWorkspace(true);
-    try { const ws = await api.openWorkspace(target); store.clear(); store.setWorkspace(ws); queryClient.clear(); setWorkspacePath(ws.rootPath); rememberWorkspace(ws.rootPath); setNotice(""); setView("files"); }
+    try { const ws = await api.openWorkspace(target); store.clear(); store.setWorkspace(ws); queryClient.clear(); setWorkspaceLoadError(""); setWatchNotice(""); setWorkspacePath(ws.rootPath); rememberWorkspace(ws.rootPath); setNotice(""); setFocusHash(undefined); setFocusWorktree(undefined); setHistoryWorktree(undefined); setRepositoryScope("all"); setView("files"); }
     catch (error) { setNotice(message(error)); }
     finally { setSwitchingWorkspace(false); }
   }
   async function switchWorkspace() {
     if (store.tabs.some((tab) => tab.type === "text" && tab.dirty) && !confirm("存在未保存文件，确定切换工作区吗？")) return;
+    ++workspaceRequest.current;
     setSwitchingWorkspace(true);
     setNotice("正在关闭当前工作区…");
     try {
@@ -155,7 +188,17 @@ export function App() {
     } catch (error) { setNotice(`关闭工作区失败：${message(error)}`); }
     finally { setSwitchingWorkspace(false); }
   }
+  async function retryWorkspace() {
+    const id = useAppStore.getState().workspace?.initialization?.id;
+    if (!id) return;
+    setWorkspaceLoadError("");
+    try {
+      const workspace = await api.retryWorkspace(id);
+      if (useAppStore.getState().workspace?.initialization?.id === id) store.setWorkspace(workspace);
+    } catch (error) { setWorkspaceLoadError(message(error)); }
+  }
   async function switchBranch(branch: GitBranchInfo) {
+    if (branch.current) return;
     if (store.tabs.some((tab) => tab.type === "text" && tab.dirty) && !confirm("存在未保存文件。切换分支可能改变磁盘内容，确定继续吗？")) return;
     setNotice(`正在切换到 ${branch.name}…`);
     try {
@@ -166,6 +209,8 @@ export function App() {
         result = await api.switchBranch(branch.name, branch.kind, true, currentRepository?.id);
       }
       store.setWorkspace(result.workspace);
+      setFocusHash(undefined);
+      setHistoryWorktree(undefined);
       store.markDiffsStale();
       await queryClient.invalidateQueries();
       setNotice(`已切换到 ${result.workspace.git?.branch ?? branch.name}`);
@@ -178,7 +223,8 @@ export function App() {
       store.markDiffsStale();
       await queryClient.invalidateQueries({ queryKey: ["git"] });
       setNotice(`当前 Git 项目：${repository.workspacePath || repository.name}`);
-    } catch (error) { setNotice(`切换 Git 项目失败：${message(error)}`); }
+      return true;
+    } catch (error) { setNotice(`切换 Git 项目失败：${message(error)}`); return false; }
   }
   async function save(tab: TextTab, version = tab.diskVersion, automatic = false) {
     const latest = useAppStore.getState().tabs.find((item): item is TextTab => item.id === tab.id && item.type === "text");
@@ -192,9 +238,7 @@ export function App() {
     }
   }
 
-  if (authenticated === null) return <div className="auth-loading"><LockKeyhole/><span>正在验证登录状态…</span></div>;
-  if (!authenticated) return <LoginPage onLogin={() => { setAuthenticated(true); setNotice(""); }} />;
-  if (!store.workspace) return <OpenWorkspace path={workspacePath} setPath={setWorkspacePath} open={openWorkspace} error={notice} recent={recentWorkspaces} removeRecent={removeRecentWorkspace} busy={switchingWorkspace} logout={async () => { await api.logout(); setAuthenticated(false); }} />;
+  if (!store.workspace) return <OpenWorkspace path={workspacePath} setPath={setWorkspacePath} open={openWorkspace} error={notice} recent={recentWorkspaces} removeRecent={removeRecentWorkspace} busy={switchingWorkspace} logout={async () => { await api.logout(); onLogout(); }} />;
   function startSidebarResize(event: React.PointerEvent<HTMLDivElement>) {
     if (window.innerWidth <= 800) return;
     event.preventDefault();
@@ -221,36 +265,57 @@ export function App() {
     localStorage.removeItem(SIDEBAR_WIDTH_KEY);
   }
 
-  return <div className={`app-shell ${view === "worktrees" ? "worktrees-mode" : ""}`} style={{ "--sidebar-width": `${sidebarWidth}px` } as React.CSSProperties}>
+  function showWorktree(id: string) { setFocusWorktree(id); setWorktreeFocusRequest(n => n + 1); setView("worktrees"); }
+  async function navigateWorktree(worktree: GitWorktree, target: "history" | "changes") {
+    try {
+      const repositories = worktree.repositoryId ? await api.repositories() : store.workspace!.repositories;
+      const repository = worktree.repositoryId ? repositories.find(r => r.id === worktree.repositoryId) : repositories.find(r => r.repositoryGroupId === worktree.repositoryGroupId);
+      if (!repository) { setNotice("所属本地仓库不可访问，请刷新状态后重试"); return; }
+      if (!await selectRepository(repository)) return;
+      setHistoryWorktree(worktree.repositoryId ? undefined : worktree);
+      setFocusHash(worktree.head ?? undefined); if (target === "history") setHistoryFocusRequest(n => n + 1); setLastGitView(target); setView(target);
+    } catch (error) { setNotice(message(error)); }
+  }
+  async function chooseScope(scope: string, groupId?: string) {
+    setRepositoryScope(scope);
+    if (view === "files" || view === "worktrees") return;
+    if (scope === "all") { setView("worktrees"); return; }
+    const repository = store.workspace!.repositories.find(r => r.repositoryGroupId === groupId && r.current) ?? store.workspace!.repositories.find(r => r.repositoryGroupId === groupId);
+    if (repository && await selectRepository(repository)) { setFocusHash(undefined); setHistoryWorktree(undefined); }
+    else if (!repository) { setView("worktrees"); setNotice("请选择该本地仓库中的工作目录"); }
+  }
+  function showGit(tab: "changes" | "history") { setLastGitView(tab); setView(tab); }
+
+  return <div className={`app-shell ${view !== "files" ? "workspace-mode" : ""}`} style={{ "--sidebar-width": `${sidebarWidth}px` } as React.CSSProperties}>
     <header className="topbar">
       <div className="brand">Code Workspace</div><div className="workspace-name">{store.workspace.name}</div>
-      {store.workspace.repositories.length > 0 && (
+      {!gitReady && <span className="workspace-load-state">{workspaceLoadingText(store.workspace)}</span>}
+      {gitReady && view === "files" && store.workspace.repositories.length > 0 && (
         <RepositoryPicker repositories={store.workspace.repositories} current={currentRepository} onSelect={selectRepository}/>
       )}
-      {currentRepository && (
+      {gitReady && view === "files" && currentRepository && (
         <BranchPicker current={currentRepository.branch} repositoryId={currentRepository.id} onSwitch={switchBranch}/>
       )}
-      <button className="icon-button" title="刷新本地快照（不连接远程）" onClick={async () => { await queryClient.invalidateQueries(); const workspace = await api.workspace(); store.setWorkspace(workspace); }}><RefreshCw size={16}/></button>
+      <button className="icon-button" title="刷新本地快照（不连接远程）" onClick={async () => { try { await queryClient.invalidateQueries(); const id = store.workspace?.initialization?.id; const workspace = await api.workspace(); if (useAppStore.getState().workspace?.initialization?.id === id) store.setWorkspace(workspace); } catch (error) { setNotice(message(error)); } }}><RefreshCw size={16}/></button>
       <button className="close-workspace" disabled={switchingWorkspace} onClick={switchWorkspace}>{switchingWorkspace ? "正在切换…" : "切换工作区"}</button>
-      <button className="logout-button" title="退出登录" onClick={async () => { await api.logout(); store.clear(); queryClient.clear(); setAuthenticated(false); }}><LogOut size={15}/></button>
+      <button className="logout-button" title="退出登录" onClick={async () => { await api.logout(); store.clear(); queryClient.clear(); onLogout(); }}><LogOut size={15}/></button>
     </header>
     <aside className="activitybar">
       <NavButton active={view === "files"} title="文件" onClick={() => setView("files")}><Files/></NavButton>
-      <NavButton active={view === "changes"} title="Git 修改" onClick={() => setView("changes")}><GitCompare/></NavButton>
-      <NavButton active={view === "worktrees"} title="Worktree 关系图" onClick={() => setView("worktrees")}><GitFork/></NavButton>
-      <NavButton active={view === "history"} title="Git 历史" onClick={() => setView("history")}><History/></NavButton>
+      <NavButton active={view === "worktrees"} title="Worktree" onClick={() => setView("worktrees")}><GitFork/></NavButton>
+      <NavButton active={view === "changes" || view === "history"} title="Git" onClick={() => setView(lastGitView)}><GitBranch/></NavButton>
     </aside>
     <aside className="sidebar">
-      {view === "files" && <Explorer
-        onOpen={async (path) => { try { const file = await api.file(path); if (file.binary && isPreviewableImage(path)) store.openImage(file); else if (file.binary) setNotice("该二进制文件暂不支持预览"); else if (file.content === null) setNotice("文件过大或编码不受支持，已阻止编辑"); else store.openFile(file); } catch (e) { setNotice(message(e)); } }}
+      {view === "files" && <Explorer key={store.workspace.openedAt}
+        onOpen={async (path) => { const openedAt = store.workspace?.openedAt; try { const file = await api.file(path); if (useAppStore.getState().workspace?.openedAt !== openedAt) return; if (file.binary && isPreviewableImage(path)) store.openImage(file); else if (file.binary) setNotice("该二进制文件暂不支持预览"); else if (file.content === null) setNotice("文件过大或编码不受支持，已阻止编辑"); else store.openFile(file); } catch (e) { if (useAppStore.getState().workspace?.openedAt === openedAt) setNotice(message(e)); } }}
         onNotice={setNotice}
       />}
-      {view === "changes" && <Changes repository={currentRepository} onDiff={(scope, path) => openDiff(api.diff(scope, path, currentRepository?.id), `${repoLabel(currentRepository)} · ${scope}: ${path ?? "全部修改"}`, currentRepository?.id)} />}
-      {view === "worktrees" && <><PanelTitle title="Worktree 关系图"/><p className="panel-empty">按共享仓库查看工作目录、独立文件状态和清理条件。选中节点可查看详情及提交。</p></>}
-      {view === "history" && <HistoryPanel key={currentRepository?.id} focusHash={focusHash} onWorktree={(id) => { setFocusWorktree(id); setView("worktrees"); }} repository={currentRepository} onDiff={(hash, path) => openDiff(api.commitDiff(hash, path, currentRepository?.id), `${repoLabel(currentRepository)} · ${hash.slice(0, 7)}: ${path ?? "全部修改"}`, currentRepository?.id)} />}
+      {view !== "files" && (gitReady ? <RepositorySidebar scope={view === "worktrees" ? repositoryScope : currentRepository ? `base:${currentRepository.repositoryGroupId}` : "all"} onScope={chooseScope} current={currentRepository}/> : <p className="panel-empty">{workspaceLoadingText(store.workspace)}</p>)}
     </aside>
     <div className="sidebar-resizer" title="拖拽调整侧栏宽度，双击恢复默认" onPointerDown={startSidebarResize} onDoubleClick={resetSidebarWidth}/>
-    <main className="editor-area">
+    <div className="workbench-area" hidden={view !== "worktrees"}>{gitReady ? <WorktreePanel key={store.workspace.openedAt} scope={repositoryScope} onScopeChange={setRepositoryScope} active={view === "worktrees"} focusWorktree={focusWorktree} focusRequest={worktreeFocusRequest} onNavigate={navigateWorktree}/> : <div className="workbench-page"><h1>Worktree</h1><WorkspaceLoading workspace={store.workspace} error={workspaceLoadError} retry={retryWorkspace}/></div>}</div>
+    <div className="workbench-area" hidden={view !== "changes" && view !== "history"}>{gitReady ? <GitWorkspace key={store.workspace.openedAt} repository={currentRepository} tab={view === "history" ? "history" : view === "changes" ? "changes" : lastGitView} onTab={showGit} active={view === "changes" || view === "history"} focusHash={focusHash} focusRequest={historyFocusRequest} historyWorktree={historyWorktree} onWorktree={showWorktree} branchPicker={currentRepository && <BranchPicker current={currentRepository.branch} repositoryId={currentRepository.id} onSwitch={switchBranch}/>}/> : <div className="workbench-page"><h1>Git</h1><WorkspaceLoading workspace={store.workspace} error={workspaceLoadError} retry={retryWorkspace}/></div>}</div>
+    <main className="editor-area" hidden={view !== "files"}>
       <div className="tab-strip">
         <div className="tabs">{store.tabs.map((tab) => <div key={tab.id} className={`tab ${tab.id === store.activeId ? "active" : ""}`} title={tabTooltip(tab)} onClick={() => store.activate(tab.id)}>
           <span>{tabLabel(tab)}</span>{tab.type === "text" && tab.dirty && <i>●</i>}{(tab.type === "text" || tab.type === "image") && tab.externalState !== "current" && <b>!</b>}{(tab.type === "diff" || tab.type === "imageDiff") && tab.stale && <b>!</b>}<button title="关闭当前 (Ctrl/Cmd+W)" onClick={(e) => { e.stopPropagation(); store.closeTab(tab.id); }}><X size={13}/></button>
@@ -261,12 +326,8 @@ export function App() {
           <button disabled={!store.tabs.length} title="关闭全部 (Alt+Shift+A)" onClick={() => store.closeAllTabs()}><XCircle/></button>
         </div>
       </div>
-      {view === "worktrees" ? <WorktreePanel focusWorktree={focusWorktree} onNavigate={async (worktree, target) => {
-        if (worktree.repositoryId) await selectRepository(store.workspace!.repositories.find(r => r.id === worktree.repositoryId) ?? (await api.repositories()).find(r => r.id === worktree.repositoryId)!);
-        else { const repository = store.workspace!.repositories.find(r => r.repositoryGroupId === worktree.repositoryGroupId); if (repository) await selectRepository(repository); }
-        setFocusHash(worktree.head ?? undefined); setView(target);
-      }}/> : <>
-      {!active && <div className="empty"><Files size={52}/><h2>选择文件开始编辑</h2><p>外部程序的文件修改会自动同步到这里。</p></div>}
+      {!gitReady && <WorkspaceLoading workspace={store.workspace} error={workspaceLoadError} retry={retryWorkspace}/>}
+      {!active && <div className="empty"><Files size={52}/><h2>选择文件开始编辑</h2><p>{gitReady ? "外部程序的文件修改会自动同步到这里。" : "可以先浏览和编辑文件，Git 信息与文件监听将在加载完成后更新。"}</p></div>}
       {active?.type === "text" && <>
         {active.externalState !== "current" && (
           <ConflictBar tab={active} save={save}/>
@@ -287,32 +348,24 @@ export function App() {
       {active?.type === "diff" && <><div className={`editor-toolbar ${active.stale ? "stale" : ""}`}><span>{active.title}</span>{active.stale && <span>Git 状态已变化，请重新打开此 Diff</span>}</div><DiffViewer key={active.id} height="100%" theme="vs-dark" original={active.oldText} modified={active.newText} language={active.language} options={{ readOnly: true, originalEditable: false, automaticLayout: true, renderSideBySide: window.innerWidth > 800 }}/></>}
       {active?.type === "imageDiff" && <><div className={`editor-toolbar ${active.stale ? "stale" : ""}`}><span>{active.title}</span>{active.stale && <span>Git 状态已变化，请重新打开此 Diff</span>}</div><div className="image-diff"><ImageDiffSide label={active.oldLabel} url={active.oldUrl}/><ImageDiffSide label={active.newLabel} url={active.newUrl}/></div></>}
       {active?.type === "image" && <><div className="editor-toolbar"><span>{active.path}</span><span>图片预览</span></div><div className="image-preview">{active.externalState === "deleted" ? <div className="image-missing">图片已从磁盘删除</div> : <img src={`/api/files/raw?sessionId=${encodeURIComponent(apiSessionId())}&path=${encodeURIComponent(active.path)}&v=${encodeURIComponent(active.version)}`} alt={active.path}/>}</div></>}
-      </>}
     </main>
-    <footer className="statusbar"><span>{notice || watchNotice || "就绪"}</span><span>{active?.type === "text" ? `${active.dirty ? "未保存" : "已保存"} · ${active.externalState}` : ""}</span></footer>
+    <footer className="statusbar"><span>{notice || watchNotice || (!gitReady ? workspaceLoadingText(store.workspace) : "就绪")}</span><span>{active?.type === "text" ? `${active.dirty ? "未保存" : "已保存"} · ${active.externalState}` : ""}</span></footer>
   </div>;
 
-  async function openDiff(promise: Promise<DiffDocument>, title: string, repositoryId?: string) {
-    try {
-      const diff = await promise;
-      if (!diff.files.length) return setNotice("没有可显示的修改");
-      let skipped = 0;
-      for (const file of diff.files) {
-      const fileTitle = diff.files.length > 1 ? `${title} · ${file.path}` : title;
-      if (file.binary) {
-        if (!isPreviewableImage(file.path)) { skipped++; continue; }
-        const oldPath = file.oldPath ?? file.path;
-        const oldUrl = file.status === "added" ? undefined : diff.scope === "working" ? gitImageUrl("index", oldPath, undefined, repositoryId) : diff.scope === "staged" || diff.scope === "all" ? gitImageUrl("head", oldPath, undefined, repositoryId) : gitImageUrl("commit", oldPath, diff.base, repositoryId);
-        const newUrl = file.status === "deleted" ? undefined : diff.scope === "staged" ? gitImageUrl("index", file.path, undefined, repositoryId) : diff.scope === "working" || diff.scope === "all" ? gitImageUrl("worktree", file.path, undefined, repositoryId) : gitImageUrl("commit", file.path, diff.target, repositoryId);
-        store.openImageDiff({ id: `image-diff:${diff.id}:${file.path}`, type: "imageDiff", title: fileTitle, oldUrl, newUrl, oldLabel: diff.base, newLabel: diff.target });
-        continue;
-      }
-      if (file.truncated) { skipped++; continue; }
-      store.openDiff({ id: `diff:${diff.id}:${file.path}`, type: "diff", title: fileTitle, oldText: file.oldText ?? "", newText: file.newText ?? "", language: languageFor(file.path) });
-      }
-      if (skipped) setNotice(`${skipped} 个文件因二进制类型或大小限制无法预览`);
-    } catch (error) { setNotice(message(error)); }
-  }
+}
+
+function workspaceLoadingText(workspace: WorkspaceInfo) {
+  const state = workspace.initialization;
+  if (state?.status === "error") return "Git 信息加载失败";
+  return ({ discovery: "正在扫描 Git 仓库…", groups: "正在读取 Worktree…", status: "正在统计文件变更…", watching: "正在启动文件监听…" })[state?.phase ?? "discovery"];
+}
+
+function WorkspaceLoading({ workspace, error, retry }: { workspace: WorkspaceInfo; error: string; retry(): void }) {
+  const failed = workspace.initialization?.status === "error";
+  return <div className={`workspace-loading-note ${failed || error ? "failed" : ""}`} role={failed || error ? "alert" : "status"} aria-live="polite">
+    <RefreshCw size={16} className={failed || error ? "" : "loading-spin"}/><div><strong>{workspaceLoadingText(workspace)}</strong><p>{error || workspace.initialization?.error || "工作区已打开，文件可以先查看。Git 信息加载完成后会自动更新。"}</p></div>
+    {(failed || error) && <button onClick={retry}>重试加载</button>}
+  </div>;
 }
 
 function OpenWorkspace({ path, setPath, open, error, recent, removeRecent, busy, logout }: { path: string; setPath(v: string): void; open(path?: string): void; error: string; recent: string[]; removeRecent(path: string): void; busy: boolean; logout(): void }) {
@@ -324,15 +377,7 @@ function OpenWorkspace({ path, setPath, open, error, recent, removeRecent, busy,
   })}</section>}<small>最近路径只保存在当前浏览器。服务不会启动终端或管理任何外部工具会话。</small></div></div>;
 }
 
-function LoginPage({ onLogin }: { onLogin(): void }) {
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  async function login() { setBusy(true); setError(""); try { await api.login(password); onLogin(); } catch (reason) { setError(message(reason)); } finally { setBusy(false); } }
-  return <div className="open-page"><div className="login-card"><div className="logo"><LockKeyhole/></div><h1>登录 Code Workspace</h1><p>请输入全局访问密码。</p><label>密码</label><input autoFocus type="password" autoComplete="current-password" value={password} disabled={busy} onChange={(event) => setPassword(event.target.value)} onKeyDown={(event) => event.key === "Enter" && login()}/><button className="primary" disabled={busy || !password} onClick={login}>{busy ? "正在登录…" : "登录"}</button>{error && <div className="error">{error}</div>}</div></div>;
-}
-
-function NavButton({ active, title, onClick, children }: { active: boolean; title: string; onClick(): void; children: React.ReactNode }) { return <button className={active ? "active" : ""} title={title} onClick={onClick}>{children}</button>; }
+function NavButton({ active, title, onClick, children }: { active: boolean; title: string; onClick(): void; children: React.ReactNode }) { return <button className={active ? "active" : ""} aria-current={active ? "page" : undefined} title={title} onClick={onClick}>{children}<span>{title}</span></button>; }
 
 function Explorer({ onOpen, onNotice }: { onOpen(path: string): void; onNotice(text: string): void }) {
   const queryClient = useQueryClient();
@@ -366,6 +411,7 @@ function Tree({ path, expanded, setExpanded, onOpen, onNotice }: { path: string;
     catch (e) { onNotice(message(e)); }
   }
   if (query.isLoading) return <div className="tree-loading">加载中…</div>;
+  if (query.isError) return <div className="tree-loading error" role="alert">{message(query.error)} <button onClick={() => query.refetch()}>重试</button></div>;
   return <div className="tree">{query.data?.map((entry) => <div key={entry.path}>
     <div className="tree-row" title={treeTitle(entry)} onContextMenu={(event) => { event.preventDefault(); setMenu({ x: event.clientX, y: event.clientY, entry }); }} onDoubleClick={async () => {
       const next = prompt("重命名为", entry.path); if (!next || next === entry.path) return; try { await api.rename(entry.path, next); queryClient.invalidateQueries({ queryKey: ["tree"] }); } catch (e) { onNotice(message(e)); }
@@ -382,31 +428,35 @@ function Tree({ path, expanded, setExpanded, onOpen, onNotice }: { path: string;
   </div>}</div>;
 }
 
-function Changes({ repository, onDiff }: { repository: GitRepositoryInfo | null; onDiff(scope: "working" | "staged" | "all", path?: string): void }) {
-  const query = useQuery({ queryKey: ["git", "status", repository?.id], queryFn: () => api.gitStatus(repository?.id), retry: false, enabled: Boolean(repository) });
-  if (!repository) return <PanelError text="未发现 Git 项目。可调整 GIT_DISCOVERY_DEPTH 后重新打开工作区。"/>;
-  if (query.isError) return <PanelError text={message(query.error)}/>;
-  const groups: Array<[string, "conflicted" | "staged" | "unstaged" | "untracked", "working" | "staged"]> = [["冲突", "conflicted", "working"], ["已暂存", "staged", "staged"], ["未暂存", "unstaged", "working"], ["未跟踪", "untracked", "working"]];
-  return <><PanelTitle title="Git 修改"><button title="刷新" onClick={() => query.refetch()}><RefreshCw size={14}/></button></PanelTitle><RepositorySummary repository={repository}/><button className="wide-action" onClick={() => onDiff("all")}>查看全部修改</button>{groups.map(([title, category, scope]) => { const files = query.data?.files.filter((f) => f.categories.includes(category)) ?? []; return files.length ? <section className="change-group" key={category}><h4>{title}<span>{files.length}</span></h4>{files.map((file) => <ChangeRow key={`${category}:${file.path}`} file={file} onClick={() => onDiff(scope, file.path)}/>)}</section> : null; })}{query.data?.clean && <div className="panel-empty">工作区没有修改</div>}</>;
-}
-
-function ChangeRow({ file, onClick }: { file: GitChangedFile; onClick(): void }) { return <button className="change-row" onClick={onClick}><span>{file.path.split("/").at(-1)}</span><small>{file.path.includes("/") ? file.path.slice(0, file.path.lastIndexOf("/")) : ""}{file.additions !== undefined && ` · +${file.additions} -${file.deletions ?? 0}`}</small><em>{file.worktreeStatus !== "." ? file.worktreeStatus : file.indexStatus}</em></button>; }
-
 function BranchPicker({ current, repositoryId, onSwitch }: { current: string | null; repositoryId?: string; onSwitch(branch: GitBranchInfo): void }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const picker = useRef<HTMLDivElement>(null);
+  const workspace = useAppStore(state => state.workspace);
+  const repository = workspace?.repositories.find(item => item.id === repositoryId);
   const query = useQuery({ queryKey: ["git", "branches", repositoryId], queryFn: () => api.branches(repositoryId), enabled: open });
-  const filtered = (query.data ?? []).filter((branch) => branch.name.toLowerCase().includes(search.toLowerCase()));
-  return <div className="branch-picker"><button className="branch" onClick={() => setOpen((value) => !value)}><GitBranch size={14}/><span>{current ?? "detached"}</span><ChevronDown size={13}/></button>{open && <div className="branch-popover"><label><Search/><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索分支"/></label><div className="branch-list">{["local", "remote"].map((kind) => { const entries = filtered.filter((branch) => branch.kind === kind); return entries.length ? <section key={kind}><h4>{kind === "local" ? "本地分支" : "远程分支"}</h4>{entries.map((branch) => <button key={branch.fullName} className={branch.current ? "current" : ""} onClick={() => { setOpen(false); onSwitch(branch); }}><GitBranch/><span>{branch.name}</span>{branch.current && <em>当前</em>}</button>)}</section> : null; })}{query.isLoading && <div className="panel-empty">加载分支…</div>}{query.isError && <div className="panel-empty error">{message(query.error)}</div>}</div></div>}</div>;
+  const worktrees = useQuery({ queryKey: ["git", "worktrees"], queryFn: api.worktrees, enabled: open, retry: false });
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: PointerEvent) => { if (!picker.current?.contains(event.target as Node)) setOpen(false); };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { setOpen(false); picker.current?.querySelector("button")?.focus(); } };
+    document.addEventListener("pointerdown", outside); document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
+  }, [open]);
+  useEffect(() => { setOpen(false); setSearch(""); }, [repositoryId]);
+  const filtered = (query.data ?? []).filter(branch => branch.name.toLowerCase().includes(search.toLowerCase()));
+  return <div className="branch-picker" ref={picker}><button className="branch" aria-label="切换分支" aria-expanded={open} title={current ?? "detached HEAD"} onClick={() => setOpen(value => !value)}><GitBranch size={14}/><span>{current ?? "detached HEAD"}</span><ChevronDown size={13}/></button>{open && <div className="branch-popover"><label><Search/><input autoFocus aria-label="搜索分支" value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索分支"/></label><div className="branch-list">{["local", "remote"].map(kind => {
+    const entries = filtered.filter(branch => branch.kind === kind);
+    return entries.length ? <section key={kind}><h4>{kind === "local" ? "本地分支" : "远程分支"}</h4>{entries.map(branch => {
+      const occupied = branch.kind === "local" && worktrees.data?.groups.find(group => group.repositoryGroupId === repository?.repositoryGroupId)?.worktrees.find(worktree => worktree.branch === branch.name && worktree.worktreeId !== repository?.worktreeId);
+      return <button key={branch.fullName} disabled={branch.current || Boolean(occupied)} className={branch.current ? "current" : ""} title={occupied ? `已在 ${occupied.path} 使用` : branch.name} onClick={() => { setOpen(false); onSwitch(branch); }}><GitBranch/><span>{branch.name}</span>{branch.current ? <em>当前</em> : occupied ? <em>已被 Worktree 使用</em> : null}</button>;
+    })}</section> : null;
+  })}{query.isLoading && <div className="panel-empty">加载分支…</div>}{query.isError && <div className="panel-empty error">{message(query.error)}</div>}{query.data && !filtered.length && <div className="panel-empty">没有匹配的分支</div>}</div><p className="branch-picker-note">此处切换工作目录；浏览历史请使用历史范围筛选。</p></div>}</div>;
 }
 
 function RepositoryPicker({ repositories, current, onSelect }: { repositories: GitRepositoryInfo[]; current: GitRepositoryInfo | null; onSelect(repository: GitRepositoryInfo): void }) {
   const [open, setOpen] = useState(false);
   return <div className="repo-picker"><button className="repo-current" title={repositoryTitle(current)} onClick={() => setOpen((value) => !value)}><GitBranch size={14}/><span>{repoLabel(current)}</span>{current && <ChangeCountBadge count={current.changedFileCount} title={repositoryTitle(current)}/>}<ChevronDown size={13}/></button>{open && <div className="repo-popover">{repositories.map((repository) => <button key={repository.id} className={repository.current ? "current" : ""} title={repositoryTitle(repository)} onClick={() => { setOpen(false); onSelect(repository); }}><GitBranch/><span><strong>{repoLabel(repository)}</strong><small>{repository.workspacePath || "."}</small></span><ChangeCountBadge count={repository.changedFileCount} title={repositoryTitle(repository)}/>{repository.current && <em>当前</em>}</button>)}</div>}</div>;
-}
-
-function RepositorySummary({ repository }: { repository: GitRepositoryInfo }) {
-  return <div className="repo-summary" title={repositoryTitle(repository)}><strong>{repoLabel(repository)}<ChangeCountBadge count={repository.changedFileCount} title={repositoryTitle(repository)}/></strong><span>{repository.workspacePath || "."}</span></div>;
 }
 
 function GitBadge({ entry }: { entry: FileTreeEntry }) {
@@ -464,5 +514,4 @@ function fileName(path: string) { return path.split("/").filter(Boolean).at(-1) 
 function stateLetter(state: string) { return ({ modified: "M", added: "A", deleted: "D", renamed: "R", untracked: "U", conflicted: "C" } as Record<string, string>)[state] ?? ""; }
 function isPreviewableImage(path: string) { return /\.(png|jpe?g|gif|webp|bmp|ico)$/i.test(path); }
 function repoLabel(repository: GitRepositoryInfo | null) { return repository ? `${repository.workspacePath || repository.name} · ${repository.branch ?? "detached"}` : "无 Git 项目"; }
-function gitImageUrl(source: "worktree" | "index" | "head" | "commit", path: string, hash?: string, repositoryId?: string) { return `/api/git/image?sessionId=${encodeURIComponent(apiSessionId())}&source=${source}&path=${encodeURIComponent(path)}${hash ? `&hash=${encodeURIComponent(hash)}` : ""}${repositoryId ? `&repositoryId=${encodeURIComponent(repositoryId)}` : ""}`; }
 function ImageDiffSide({ label, url }: { label: string; url?: string }) { return <section><header>{label}</header><div>{url ? <img src={url} alt={label}/> : <span>此版本中不存在图片</span>}</div></section>; }

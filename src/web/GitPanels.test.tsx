@@ -14,7 +14,7 @@ const group = (name: string, worktrees: WorktreeStatus[], url = `https://example
 
 function mount(children: React.ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0, refetchOnWindowFocus: false } } });
-  return render(<QueryClientProvider client={client}>{children}</QueryClientProvider>);
+  return render(children, { wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
 }
 beforeEach(() => {
   vi.spyOn(api, "sync").mockResolvedValue(null);
@@ -53,10 +53,11 @@ it("WT-11: groups by visible Git address while keeping independent bases, totals
   mount(<WorktreePanel onNavigate={vi.fn()}/>);
   const shared = await screen.findByRole("region", { name: `Git 地址：${sharedUrl}` });
   expect(screen.getAllByRole("region", { name: /^Git 地址：/ })).toHaveLength(2);
-  expect(within(shared).getAllByRole("region", { name: /^本地 base：/ })).toHaveLength(2);
+  expect(within(shared).getAllByRole("region", { name: /^本地仓库：/ })).toHaveLength(2);
   expect(within(shared).getAllByRole("row").filter(row => row.hasAttribute("data-worktree")).map(row => row.getAttribute("data-worktree"))).toEqual(["dirty-A", "clean-A", "clean-B"]);
-  expect(within(shared).getByText("2 个 base · 3 个 worktree · 修改 1 / 干净 2 / 未知 0")).toBeTruthy();
+  expect(within(shared).getByText("2 个本地仓库 · 3 个 Worktree · 修改 1 / 干净 2 / 未知 0")).toBeTruthy();
   expect(within(screen.getByLabelText("Worktree 全局统计")).getByRole("button", { name: "全部 Worktree 4" })).toBeTruthy();
+  fireEvent.click(within(shared).getByText("远程信息"));
   fireEvent.click(within(shared).getByText("其他 Git 地址 · 2 个"));
   expect(within(shared).getByText("https://push.example.com/upstream.git")).toBeTruthy();
   fireEvent.click(within(shared).getByRole("row", { name: /clean-B · 文件干净/ }));
@@ -95,4 +96,66 @@ it("GG-08: locating an unloaded local HEAD switches to current history instead o
   await screen.findByText("Current HEAD");
   await waitFor(() => expect((screen.getByLabelText("历史范围") as HTMLSelectElement).value).toBe("current"));
   expect(document.querySelector(`[data-commit="${repository.head}"]`)?.classList.contains("selected")).toBe(true);
+});
+
+it("locates an unloaded Worktree HEAD when opening history directly", async () => {
+  vi.spyOn(api, "graph").mockImplementation(async (_cursor, _repo, options) => options?.scope === "current" ? page([commit("a", "Worktree HEAD")], { scope: "current" }) : page([commit("b", "Other branch")]));
+  mount(<HistoryPanel repository={repository} focusHash={repository.head!} focusRequest={1} onWorktree={vi.fn()}/>);
+  await screen.findByText("Worktree HEAD");
+  expect((screen.getByLabelText("历史范围") as HTMLSelectElement).value).toBe("current");
+  expect(document.querySelector(`[data-commit="${repository.head}"]`)?.classList.contains("selected")).toBe(true);
+});
+
+it("repeated navigation to the same Worktree reselects its commit after manual browsing", async () => {
+  const first = commit("a", "Worktree HEAD"), second = commit("b", "Another commit");
+  vi.spyOn(api, "graph").mockResolvedValue(page([first, second]));
+  const props = { repository, focusHash: first.hash, onWorktree: vi.fn() };
+  const view = mount(<HistoryPanel {...props} focusRequest={1}/>);
+  fireEvent.click(await screen.findByRole("button", { name: /Another commit/ }));
+  expect(document.querySelector(`[data-commit="${second.hash}"]`)?.classList.contains("selected")).toBe(true);
+  view.rerender(<HistoryPanel {...props} focusRequest={2}/>);
+  await waitFor(() => expect(document.querySelector(`[data-commit="${first.hash}"]`)?.classList.contains("selected")).toBe(true));
+  expect((screen.getByLabelText("历史范围") as HTMLSelectElement).value).toBe("all");
+});
+
+it("locates an external Worktree through its branch without using the representative repository HEAD", async () => {
+  const external = commit("c", "External Worktree HEAD");
+  vi.mocked(api.refs).mockResolvedValue([{ name: "topic", fullName: "refs/heads/topic", kind: "local" }]);
+  vi.spyOn(api, "graph").mockImplementation(async (_cursor, _repo, options) => options?.ref === "refs/heads/topic" ? page([external], { scope: "ref" }) : page([commit("b", "Other branch")]));
+  mount(<HistoryPanel repository={repository} focusHash={external.hash} focusRef="refs/heads/topic" onWorktree={vi.fn()}/>);
+  await screen.findByText("External Worktree HEAD");
+  expect((screen.getByLabelText("指定引用") as HTMLSelectElement).value).toBe("refs/heads/topic");
+  expect(document.querySelector(`[data-commit="${external.hash}"]`)?.classList.contains("selected")).toBe(true);
+});
+
+it("combines repository scope and search while keeping global counts and restoring requested details", async () => {
+  vi.spyOn(api, "worktrees").mockResolvedValue({ groups: [group("A", [worktree("dirty-A", false)]), group("B", [worktree("clean-B", true)])] });
+  const props = { onNavigate: vi.fn(), focusWorktree: "dirty-A" };
+  const view = mount(<WorktreePanel {...props} focusRequest={1}/>);
+  await screen.findByRole("row", { name: /dirty-A · 有修改/ });
+  fireEvent.change(screen.getByLabelText("筛选仓库"), { target: { value: "base:B" } });
+  fireEvent.change(screen.getByLabelText("搜索目录或分支"), { target: { value: "clean-B" } });
+  expect(document.querySelectorAll("[data-worktree]")).toHaveLength(1);
+  expect(within(screen.getByLabelText("Worktree 全局统计")).getByRole("button", { name: "全部 Worktree 2" })).toBeTruthy();
+  view.rerender(<WorktreePanel {...props} focusRequest={2}/>);
+  expect((screen.getByLabelText("搜索目录或分支") as HTMLInputElement).value).toBe("");
+  expect((screen.getByLabelText("筛选仓库") as HTMLSelectElement).value).toBe("all");
+  expect(document.querySelector("[data-worktree].selected")?.getAttribute("data-worktree")).toBe("dirty-A");
+});
+
+it("opens cleanup as a read-only dialog and restores the selected detail and focus on Escape", async () => {
+  const selected = worktree("dirty", false);
+  vi.spyOn(api, "worktrees").mockResolvedValue({ groups: [group("repo", [selected])] });
+  vi.spyOn(api, "removalPreview").mockResolvedValue({ worktree: selected, token: "preview", allowed: false, reasons: ["工作目录存在未提交修改"], warnings: [], ignoredCount: 0, unsavedCount: 0, otherSessionCount: 0, branchPreserved: "trunk" });
+  mount(<WorktreePanel onNavigate={vi.fn()}/>);
+  fireEvent.click(await screen.findByRole("row", { name: /dirty · 有修改/ }));
+  const trigger = screen.getByRole("button", { name: "清理预览" });
+  trigger.focus(); fireEvent.click(trigger);
+  const dialog = await screen.findByRole("dialog");
+  await within(dialog).findByText("工作目录存在未提交修改");
+  expect(within(dialog).queryByRole("button", { name: /删除|移除/ })).toBeNull();
+  fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+  expect(document.querySelector("[data-worktree].selected")?.getAttribute("data-worktree")).toBe("dirty");
 });
