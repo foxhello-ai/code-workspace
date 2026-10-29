@@ -17,7 +17,7 @@ import { WorktreeService } from "./services/worktree-service.js";
 import { AuthService } from "./services/auth-service.js";
 import type { HistoryScope, GitWorktree, WorkspaceChangeSummary, WorkspaceInfo } from "../shared/contracts.js";
 
-export async function buildApp(options: { disableAuth?: boolean } = {}) {
+export async function buildApp(options: { disableAuth?: boolean; webRoot?: string } = {}) {
   const app = Fastify({ logger: true, bodyLimit: 12 * 1024 * 1024, genReqId: () => crypto.randomUUID() });
   await app.register(websocket);
   const auth = new AuthService();
@@ -59,7 +59,11 @@ export async function buildApp(options: { disableAuth?: boolean } = {}) {
     const hub = new EventHub();
     const watcher = new WatchService(workspace, git, hub);
     const files = new FileService(workspace, () => null);
-    workspace.onChange = async (context) => { await watcher.stop(); git.invalidate(); hub.clear(); if (context) await watcher.start(); };
+    workspace.onChange = async (context) => {
+      if (context) await watcher.start(context);
+      else { await watcher.stop(); git.invalidate(); hub.clear(); }
+    };
+    workspace.onInitialize = async (context) => { await withChangeCounts({ workspace, git }, context.info); };
     const worktrees = new WorktreeService(workspace, git, tasks, w => occupancy(id, w));
     const created: Session = { workspace, git, hub, watcher, files, worktrees, editor: { paths: [], dirtyPaths: [] }, lastSeen: Date.now() };
     sessions.set(id, created);
@@ -68,6 +72,8 @@ export async function buildApp(options: { disableAuth?: boolean } = {}) {
 
   app.addHook("preValidation", async request => {
     if (!request.url.startsWith("/api/git/")) return;
+    const initialization = session(request).workspace.get().info.initialization;
+    if (initialization && initialization.status !== "ready" && request.url !== "/api/git/editor-state") throw new AppError(409, "WORKSPACE_LOADING", "Git 信息尚未加载完成，请稍后重试");
     const q = request.query as Record<string, unknown>;
     const body = request.body as Record<string, unknown> | undefined;
     for (const value of [q, ...(request.url === "/api/git/switch" && body ? [body] : [])]) {
@@ -86,6 +92,7 @@ export async function buildApp(options: { disableAuth?: boolean } = {}) {
 
   const isSecure = (request: { headers: Record<string, unknown> }) => request.headers["x-forwarded-proto"] === "https";
   app.addHook("onRequest", async (request, reply) => {
+    if (request.url.startsWith("/api/")) reply.header("cache-control", "no-store");
     const publicApi = request.url === "/health" || request.url.startsWith("/api/auth/");
     if (!options.disableAuth && request.url.startsWith("/api/") && !publicApi && !auth.isAuthenticated(request.headers.cookie)) {
       return reply.status(401).send({ error: { code: "AUTH_REQUIRED", message: "请先登录" }, requestId: request.id });
@@ -103,17 +110,20 @@ export async function buildApp(options: { disableAuth?: boolean } = {}) {
     return reply.header("set-cookie", auth.cookie(isSecure(request))).send({ data: { authenticated: true }, requestId: request.id });
   });
   app.post("/api/auth/logout", async (request, reply) => reply.header("set-cookie", auth.clearCookie(isSecure(request))).send({ data: { authenticated: false }, requestId: request.id }));
-  app.post<{ Body: { path: string } }>("/api/workspace/open", async (request) => {
+  app.post<{ Body: { path: string; background?: boolean } }>("/api/workspace/open", async (request) => {
     const scope = session(request);
     scope.editor = { paths: [], dirtyPaths: [] };
-    const info = await scope.workspace.open(request.body.path);
-    return { data: await withChangeCounts(scope, info), requestId: request.id };
+    const info = await scope.workspace.open(request.body.path, { background: request.body.background === true });
+    return { data: info, requestId: request.id };
   });
-  app.get("/api/workspace", async (request) => {
+  app.get<{ Querystring: { snapshot?: string } }>("/api/workspace", async (request) => {
     const scope = session(request);
+    const info = scope.workspace.get().info;
+    if (request.query.snapshot === "1" || (info.initialization && info.initialization.status !== "ready")) return { data: info, requestId: request.id };
     await scope.workspace.refreshGitInfo();
     return { data: await withChangeCounts(scope), requestId: request.id };
   });
+  app.post<{ Body: { initializationId: string } }>("/api/workspace/retry", async request => ({ data: session(request).workspace.retryInitialization(request.body.initializationId), requestId: request.id }));
   app.post("/api/workspace/close", async (request) => { const scope = session(request); scope.editor = { paths: [], dirtyPaths: [] }; await scope.workspace.close(); return { data: null, requestId: request.id }; });
   app.post<{ Body: { paths: string[] } }>("/api/workspaces/change-summary", async (request) => {
     const paths = Array.isArray(request.body?.paths) ? request.body.paths.filter((item): item is string => typeof item === "string").slice(0, 10) : [];
@@ -130,11 +140,13 @@ export async function buildApp(options: { disableAuth?: boolean } = {}) {
   const insideOrSame = (parent: string, child: string) => parent === "" || child === parent || child.startsWith(`${parent}/`);
   const relativeToRepo = (workspacePath: string, repoPath: string) => repoPath ? workspacePath === repoPath ? "" : workspacePath.startsWith(`${repoPath}/`) ? workspacePath.slice(repoPath.length + 1) : null : workspacePath;
   const withChangeCounts = async (scope: { workspace: WorkspaceService; git: GitService }, info = scope.workspace.get().info): Promise<WorkspaceInfo> => {
+    const context = scope.workspace.get();
     const snapshots = await Promise.all(info.repositories.map(async (repository) => ({
       repository,
-      snapshot: await scope.git.status(true, repository.id).catch(() => null)
+      snapshot: await scope.git.status(true, repository.id, false).catch(() => null)
     })));
-    info = scope.workspace.get().info;
+    if (!scope.workspace.isCurrent(context)) return info;
+    info = context.info;
     const repositories = info.repositories.map((repository) => {
       const snapshot = snapshots.find((item) => item.repository.id === repository.id)?.snapshot;
       return { ...repository, changedFileCount: snapshot?.files.length };
@@ -149,7 +161,7 @@ export async function buildApp(options: { disableAuth?: boolean } = {}) {
       changedRepositoryCount,
       changedFileCount
     };
-    scope.workspace.get().info = enriched;
+    context.info = enriched;
     return enriched;
   };
   const workspaceChangeSummary = async (workspacePath: string): Promise<WorkspaceChangeSummary> => {
@@ -180,12 +192,15 @@ export async function buildApp(options: { disableAuth?: boolean } = {}) {
   app.get<{ Querystring: { path?: string; showHidden?: string; showIgnored?: string } }>("/api/files/tree", async (request) => {
     const scope = session(request);
     let data = await scope.files.tree(request.query.path ?? "", request.query.showHidden !== "false");
-    const repositories = scope.workspace.get().info.repositories.flatMap(r => (r.workspacePaths ?? [r.workspacePath]).map(workspacePath => ({ ...r, workspacePath })));
+    const initialization = scope.workspace.get().info.initialization;
+    if (initialization && initialization.status !== "ready") return { data, requestId: request.id };
+    const repositories = scope.workspace.get().info.repositories.flatMap(r => (r.workspacePaths ?? [r.workspacePath]).map(workspacePath => ({ ...r, workspacePath })))
+      .filter(repository => data.some(entry => relativeToRepo(entry.path, repository.workspacePath) !== null || (entry.kind === "directory" && insideOrSame(entry.path, repository.workspacePath))));
     if (repositories.length) {
       const snapshots = await Promise.all(repositories.map(async (repository) => {
         const paths = data.map((entry) => ({ entry, repoPath: relativeToRepo(entry.path, repository.workspacePath) })).filter((item): item is { entry: typeof data[number]; repoPath: string } => item.repoPath !== null);
         const [snapshot, tracked] = await Promise.all([
-          scope.git.status(true, repository.id).catch(() => null),
+          scope.git.status(true, repository.id, false).catch(() => null),
           scope.git.tracked(paths.map((item) => item.repoPath).filter(Boolean), repository.id).catch(() => new Set<string>())
         ]);
         return { repository, snapshot, tracked };
@@ -320,11 +335,22 @@ export async function buildApp(options: { disableAuth?: boolean } = {}) {
   });
 
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const webRoot = path.resolve(here, "../../web");
+  const webRoot = options.webRoot ?? path.resolve(here, "../../web");
   if (existsSync(webRoot)) {
-    await app.register(fastifyStatic, { root: webRoot });
-    app.setNotFoundHandler((request, reply) => request.url.startsWith("/api/") ? reply.status(404).send({ error: { code: "NOT_FOUND", message: "接口不存在" }, requestId: request.id }) : reply.sendFile("index.html"));
+    await app.register(fastifyStatic, {
+      root: webRoot,
+      preCompressed: true,
+      setHeaders(reply, file) {
+        const relative = path.relative(webRoot, file).replaceAll("\\", "/").replace(/\.(br|gz)$/, "");
+        const hashed = relative.startsWith("assets/") && /-[\w-]{8,}\.[\w]+$/.test(relative);
+        reply.header("cache-control", hashed ? "public, max-age=31536000, immutable" : "no-cache");
+      }
+    });
+    app.setNotFoundHandler((request, reply) => {
+      if (request.url.startsWith("/api/") || request.url.startsWith("/assets/")) return reply.status(404).header("cache-control", "no-store").send({ error: { code: "NOT_FOUND", message: "资源不存在" }, requestId: request.id });
+      return reply.sendFile("index.html");
+    });
   }
-  app.addHook("onClose", async () => { await Promise.all(Array.from(sessions.values()).map((scope) => scope.watcher.stop())); });
+  app.addHook("onClose", async () => { await Promise.all(Array.from(sessions.values()).map((scope) => scope.workspace.dispose())); });
   return app;
 }

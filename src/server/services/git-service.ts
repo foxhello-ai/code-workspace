@@ -12,26 +12,49 @@ const validHash = /^[0-9a-f]{4,64}$/i;
 export class GitService {
   private revisions = new Map<string, number>();
   private snapshots = new Map<string, GitStatusSnapshot>();
+  private detailedSnapshots = new Set<string>();
+  private statusQueries = new Map<string, Promise<GitStatusSnapshot>>();
   constructor(private workspace: WorkspaceService) {}
 
   private context(repositoryId?: string) {
     return this.workspace.getRepository(repositoryId);
   }
 
-  invalidate(repositoryId?: string) { repositoryId ? this.snapshots.delete(repositoryId) : this.snapshots.clear(); }
+  invalidate(repositoryId?: string) {
+    if (repositoryId) {
+      this.snapshots.delete(repositoryId); this.detailedSnapshots.delete(repositoryId);
+      for (const key of this.statusQueries.keys()) if (key.startsWith(`${repositoryId}:`)) this.statusQueries.delete(key);
+    } else { this.snapshots.clear(); this.detailedSnapshots.clear(); this.statusQueries.clear(); }
+  }
   getRevision(repositoryId?: string) {
     const repository = repositoryId ? this.workspace.get().info.repositories.find((item) => item.id === repositoryId) : this.workspace.get().info.git;
     return repository ? this.revisions.get(repository.id) ?? 0 : 0;
   }
 
-  async status(force = false, repositoryId?: string): Promise<GitStatusSnapshot> {
+  async status(force = false, repositoryId?: string, includeStats = true): Promise<GitStatusSnapshot> {
     const { repository, runner } = this.context(repositoryId);
-    return this.statusAt(repository, runner, force);
+    return this.statusAt(repository, runner, force, includeStats);
   }
 
-  async statusAt(repository: Pick<GitRepositoryInfo, "id">, runner: GitRunner, force = true): Promise<GitStatusSnapshot> {
+  async statusAt(repository: Pick<GitRepositoryInfo, "id">, runner: GitRunner, force = true, includeStats = true): Promise<GitStatusSnapshot> {
     const cached = this.snapshots.get(repository.id);
-    if (cached && !force) return cached;
+    if (cached && !force && (!includeStats || this.detailedSnapshots.has(repository.id))) return cached;
+    const key = `${repository.id}:${includeStats}`;
+    const pending = this.statusQueries.get(key);
+    if (pending) return pending;
+    const query = this.readStatus(repository, runner, includeStats).then(snapshot => {
+      // Invalidation can start a newer read while this process is still running.
+      if (this.statusQueries.get(key) === query) {
+        this.snapshots.set(repository.id, snapshot);
+        if (includeStats) this.detailedSnapshots.add(repository.id); else this.detailedSnapshots.delete(repository.id);
+      }
+      return snapshot;
+    }).finally(() => { if (this.statusQueries.get(key) === query) this.statusQueries.delete(key); });
+    this.statusQueries.set(key, query);
+    return query;
+  }
+
+  private async readStatus(repository: Pick<GitRepositoryInfo, "id">, runner: GitRunner, includeStats: boolean): Promise<GitStatusSnapshot> {
     const raw = await runner.run(["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all"]);
     const records = raw.toString("utf8").split("\0").filter(Boolean);
     const files: GitChangedFile[] = [];
@@ -72,14 +95,15 @@ export class GitService {
         if (a === "-" || d === "-") file.binary = true;
       }
     };
-    await applyStats(["diff", "--numstat"], "unstaged");
-    await applyStats(["diff", "--cached", "--numstat"], "staged");
+    if (includeStats) await Promise.all([
+      files.some(file => file.categories.includes("unstaged")) ? applyStats(["diff", "--numstat"], "unstaged") : undefined,
+      files.some(file => file.categories.includes("staged")) ? applyStats(["diff", "--cached", "--numstat"], "staged") : undefined
+    ]);
     const revision = (this.revisions.get(repository.id) ?? 0) + 1;
     this.revisions.set(repository.id, revision);
     const counts = { conflicted: 0, staged: 0, unstaged: 0, untracked: 0 };
     for (const file of files) for (const category of file.categories) counts[category]++;
     const snapshot = { repositoryId: repository.id, revision, branch, head, detached: !branch && Boolean(head), clean: files.length === 0, files, counts };
-    this.snapshots.set(repository.id, snapshot);
     return snapshot;
   }
 

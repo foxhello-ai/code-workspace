@@ -30,6 +30,12 @@ export interface WorkspaceInfo {
   repositoryDiscovery: { depth: number; maxDirs: number; timedOut: boolean; truncated: boolean; checkedDirs: number };
   changedRepositoryCount?: number;
   changedFileCount?: number;
+  initialization?: {
+    id: string;
+    status: "loading" | "ready" | "error";
+    phase: "discovery" | "groups" | "status" | "watching";
+    error?: string;
+  };
 }
 
 export interface FileTreeEntry {

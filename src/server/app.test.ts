@@ -140,6 +140,47 @@ describe("workspace API", () => {
     }
   });
 
+  it("preserves discovery limits and deduplicates aliases when probing batches", async () => {
+    const aggregate = await mkdtemp(path.join(os.tmpdir(), "code-workspace-batch-limit-"));
+    const originalDepth = config.gitDiscoveryDepth, originalMaxDirs = config.gitDiscoveryMaxDirs;
+    try {
+      for (const name of ["repo-a", "repo-b", "repo-c"]) await symlink(root, path.join(aggregate, name), "dir");
+      config.gitDiscoveryDepth = 1; config.gitDiscoveryMaxDirs = 3;
+      const response = await app.inject({ method: "POST", url: "/api/workspace/open", payload: { path: aggregate } });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.repositoryDiscovery).toMatchObject({ checkedDirs: 3, truncated: true });
+      expect(response.json().data.repositories).toHaveLength(1);
+      expect(response.json().data.repositories[0].workspacePaths).toHaveLength(2);
+    } finally {
+      config.gitDiscoveryDepth = originalDepth; config.gitDiscoveryMaxDirs = originalMaxDirs;
+      await app.inject({ method: "POST", url: "/api/workspace/close" });
+      await rm(aggregate, { recursive: true, force: true });
+    }
+  });
+
+  it("queries only relevant repositories and omits numstat when expanding a repository directory", async () => {
+    const aggregate = await mkdtemp(path.join(os.tmpdir(), "code-workspace-tree-scope-"));
+    const other = path.join(aggregate, "repo-b");
+    const originalDepth = config.gitDiscoveryDepth;
+    let spy: ReturnType<typeof vi.spyOn> | undefined;
+    try {
+      await mkdir(other); execFileSync("git", ["init", "-q"], { cwd: other });
+      await symlink(root, path.join(aggregate, "repo-a"), "dir");
+      config.gitDiscoveryDepth = 1;
+      await app.inject({ method: "POST", url: "/api/workspace/open", payload: { path: aggregate } });
+      spy = vi.spyOn(GitRunner.prototype, "run");
+      const tree = await app.inject({ method: "GET", url: "/api/files/tree?path=repo-a" });
+      expect(tree.statusCode).toBe(200);
+      expect(tree.json().data.some((entry: { name: string }) => entry.name === "hello.txt")).toBe(true);
+      expect(spy.mock.calls.filter(([args]) => args[0] === "status")).toHaveLength(1);
+      expect(spy.mock.calls.some(([args]) => args.includes("--numstat"))).toBe(false);
+    } finally {
+      spy?.mockRestore(); config.gitDiscoveryDepth = originalDepth;
+      await app.inject({ method: "POST", url: "/api/workspace/close" });
+      await rm(aggregate, { recursive: true, force: true });
+    }
+  });
+
   it("keeps workspace state isolated by browser session", async () => {
     const other = await mkdtemp(path.join(os.tmpdir(), "code-workspace-other-"));
     try {

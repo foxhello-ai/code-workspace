@@ -1,9 +1,8 @@
 import chokidar, { type FSWatcher } from "chokidar";
-import type { Dirent } from "node:fs";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { config } from "../config.js";
-import { WorkspaceService } from "./workspace-service.js";
+import { WorkspaceService, type WorkspaceContext } from "./workspace-service.js";
 import { EventHub } from "./event-hub.js";
 import { GitService } from "./git-service.js";
 
@@ -16,10 +15,10 @@ export class WatchService {
   private pending = new Map<string, NodeJS.Timeout>();
   constructor(private workspace: WorkspaceService, private git: GitService, private hub: EventHub) {}
 
-  async start() {
+  async start(context: WorkspaceContext = this.workspace.get()) {
     await this.stop();
+    if (!this.workspace.isCurrent(context)) return;
     this.stopped = false;
-    const context = this.workspace.get();
     const root = context.info.rootPath;
     const groups = context.info.repositoryGroups ?? [];
     const roots = [...new Set(groups.map(g => g.commonDir))];
@@ -41,6 +40,7 @@ export class WatchService {
       }
     };
     await Promise.all(roots.map(countMetadata));
+    if (this.stopped || !this.workspace.isCurrent(context)) return;
     if (metadataCount > 5000) this.hub.emit(context.info.id, { type: "watcher.metadataDisabled" });
     else {
       this.metadataWatcher = chokidar.watch(roots, { ignoreInitial: true, followSymlinks: false, ignored: ignoreMetadata });
@@ -48,6 +48,7 @@ export class WatchService {
       this.metadataWatcher.on("error", () => this.hub.emit(context.info.id, { type: "watcher.metadataError" }));
     }
     const watchableEntries = await this.countWatchableEntries(root);
+    if (this.stopped || !this.workspace.isCurrent(context)) return;
     if (watchableEntries > config.watchMaxFiles) {
       this.hub.emit(context.info.id, { type: "watcher.disabled", version: String(watchableEntries) });
       return;
@@ -116,19 +117,16 @@ export class WatchService {
     let count = 0;
     const queue = [root];
     while (queue.length) {
-      const current = queue.shift()!;
-      let entries: Dirent[];
-      try {
-        entries = await readdir(current, { withFileTypes: true });
-      } catch {
-        continue;
-      }
-      for (const entry of entries) {
-        const absolute = path.join(current, entry.name);
-        if (this.ignored(root, absolute)) continue;
-        count++;
-        if (count > config.watchMaxFiles) return count;
-        if (entry.isDirectory()) queue.push(absolute);
+      const batch = queue.splice(0, 4);
+      const directories = await Promise.all(batch.map(async current => ({ current, entries: await readdir(current, { withFileTypes: true }).catch(() => []) })));
+      for (const { current, entries } of directories) {
+        for (const entry of entries) {
+          const absolute = path.join(current, entry.name);
+          if (this.ignored(root, absolute)) continue;
+          count++;
+          if (count > config.watchMaxFiles) return count;
+          if (entry.isDirectory()) queue.push(absolute);
+        }
       }
     }
     return count;

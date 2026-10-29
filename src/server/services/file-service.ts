@@ -99,6 +99,7 @@ export class FileService {
 
   private async protectWorktree(relative: string) {
     const context = this.workspace.get();
+    if (context.info.initialization && context.info.initialization.status !== "ready") throw new AppError(409, "WORKSPACE_LOADING", "Git 信息尚未加载完成，请稍后重命名或删除");
     const logical = context.guard.resolveLogical(relative);
     // A plain symlink alias can be unlinked/renamed without touching its target.
     if ((await lstat(logical.absolute)).isSymbolicLink()) return;
