@@ -41,7 +41,7 @@ Install a compiled GitHub Release directly. Both installers verify SHA-256, gene
 **macOS / Linux:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | bash
+curl --http1.1 -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | bash
 ```
 
 **Windows 11 x64, in PowerShell:**
@@ -82,7 +82,7 @@ code-workspace stop
 Logs and the PID file are stored in `~/.local/state/code-workspace`. Rerun the install command to install the latest release. It preserves configuration and passwords, stops the managed service, and starts the selected version. Previous version directories are retained. Save your edits before upgrading, as the service restarts. For a specific release, set `CODE_WORKSPACE_VERSION`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | CODE_WORKSPACE_VERSION=1.1.3 bash
+curl --http1.1 -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | CODE_WORKSPACE_VERSION=1.2.0 bash
 ```
 
 On Windows, set `$env:CODE_WORKSPACE_VERSION = '1.1.3'` before running the PowerShell installer. The same `start`, `status`, `logs`, `restart`, and `stop` commands are available on Windows; the command directory is added to your user PATH. Services run as the current user and do not automatically start after a reboot.

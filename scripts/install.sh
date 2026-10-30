@@ -20,6 +20,30 @@ fail() {
   exit 1
 }
 
+download_release_file() {
+  download_attempt=1
+  while :; do
+    # Sequential release downloads do not need HTTP/2. Some proxies fail its
+    # framing, and curl's default --retry does not retry errors 16/18/92.
+    if download_http_status="$(curl --http1.1 -fsSL --connect-timeout 15 --max-time 600 \
+      --write-out '%{http_code}' -o "$2.part" "$1")"; then
+      mv "$2.part" "$2"
+      return $?
+    else
+      download_status=$?
+    fi
+    rm -f "$2.part"
+    case "$download_status:$download_http_status" in
+      5:*|6:*|7:*|16:*|18:*|28:*|35:*|52:*|55:*|56:*|92:*|22:408|22:429|22:500|22:502|22:503|22:504) ;;
+      *) return "$download_status" ;;
+    esac
+    [ "$download_attempt" -lt 4 ] || return "$download_status"
+    echo "下载连接失败（curl $download_status，HTTP $download_http_status），正在重试（$download_attempt/3）…" >&2
+    download_attempt=$((download_attempt + 1))
+    sleep 1
+  done
+}
+
 command -v curl >/dev/null 2>&1 || fail "需要 curl。"
 command -v tar >/dev/null 2>&1 || fail "需要 tar。"
 command -v node >/dev/null 2>&1 || fail "需要 Node.js 22 或更高版本。"
@@ -47,8 +71,8 @@ trap 'rm -rf "$temporary_dir"' EXIT HUP INT TERM
 archive_path="$temporary_dir/$archive_name"
 checksum_path="$archive_path.sha256"
 
-curl -fsSL --retry 3 --retry-delay 1 -o "$archive_path" "$release_base/$archive_name" || fail "下载发布包失败：$tag"
-curl -fsSL --retry 3 --retry-delay 1 -o "$checksum_path" "$release_base/$archive_name.sha256" || fail "下载校验文件失败：$tag"
+download_release_file "$release_base/$archive_name" "$archive_path" || fail "下载发布包失败：$tag"
+download_release_file "$release_base/$archive_name.sha256" "$checksum_path" || fail "下载校验文件失败：$tag"
 
 expected_checksum="$(awk 'NF { print $1; exit }' "$checksum_path")"
 case "$expected_checksum" in

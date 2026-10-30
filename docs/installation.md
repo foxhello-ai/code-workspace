@@ -29,7 +29,7 @@ v1.1.4 修复了局域网 HTTP 页面缺少 `crypto.randomUUID` 导致无法发�
 **macOS / Linux**：安装最新版、校验发布包、生成随机访问密码并启动服务：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | bash
+curl --http1.1 -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | bash
 ```
 
 **Windows 11 x64**：在普通 PowerShell 窗口执行：
@@ -47,7 +47,7 @@ macOS/Linux 密码保存在 `~/.config/code-workspace/config.env`；Windows 保�
 安装脚本从 GitHub Latest Release 的稳定下载地址获取发布包，并对下载内容执行 SHA-256 校验，不依赖 GitHub API 配额。需要安装指定版本时：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | CODE_WORKSPACE_VERSION=1.2.0 bash
+curl --http1.1 -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | CODE_WORKSPACE_VERSION=1.2.0 bash
 ```
 
 Windows 指定版本：
@@ -56,6 +56,12 @@ Windows 指定版本：
 $env:CODE_WORKSPACE_VERSION = '1.2.0'
 irm https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.ps1 | iex
 ```
+
+### 下载失败：HTTP/2 framing layer
+
+`curl: (16) Error in the HTTP2 framing layer` 表示下载连接的 HTTP/2 协议处理失败。入口命令的 `--http1.1` 仅影响安装脚本本身的下载；安装脚本也会对发布包和校验文件使用 HTTP/1.1，因此重新执行上面的在线安装命令即可使用修复。
+
+下载遇到连接中断、超时或可重试的 HTTP 服务错误时，最多重试 3 次，每次重新下载临时文件，仍执行 SHA-256 校验。连接超时为 15 秒，单次传输最多等待 10 分钟；下载或校验失败时保留原服务、版本和配置。HTTP 404 等不可重试错误会直接停止。此修复在 `main/scripts/install.sh`，安装 v1.2.0 等已有成品包时同样生效。
 
 ## 日常使用
 

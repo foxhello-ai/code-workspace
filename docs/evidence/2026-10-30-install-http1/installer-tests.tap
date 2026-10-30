@@ -1,0 +1,70 @@
+TAP version 13
+# Subtest: shell installer uses HTTP/1.1 and retries incomplete downloads and HTTP service errors
+ok 1 - shell installer uses HTTP/1.1 and retries incomplete downloads and HTTP service errors
+  ---
+  duration_ms: 8588.685228
+  type: 'test'
+  ...
+# Subtest: shell installer limits failed transfer retries and preserves a running installation
+ok 2 - shell installer limits failed transfer retries and preserves a running installation
+  ---
+  duration_ms: 7751.417843
+  type: 'test'
+  ...
+# Subtest: shell installer does not retry a missing release or create an installation
+ok 3 - shell installer does not retry a missing release or create an installation
+  ---
+  duration_ms: 880.957723
+  type: 'test'
+  ...
+# Subtest: installer starts a fresh release, preserves config on reinstall, and runs the upgraded version
+ok 4 - installer starts a fresh release, preserves config on reinstall, and runs the upgraded version
+  ---
+  duration_ms: 15216.194885
+  type: 'test'
+  ...
+# Subtest: installer rejects an archive with an incorrect checksum
+ok 5 - installer rejects an archive with an incorrect checksum
+  ---
+  duration_ms: 292.233352
+  type: 'test'
+  ...
+# Subtest: production archive installs with bundled dependencies and serves authenticated Git APIs
+ok 6 - production archive installs with bundled dependencies and serves authenticated Git APIs # SKIP
+  ---
+  duration_ms: 0.865762
+  type: 'test'
+  ...
+# Subtest: background manager supports idempotent start, status, logs, restart and stop
+ok 7 - background manager supports idempotent start, status, logs, restart and stop
+  ---
+  duration_ms: 2250.969995
+  type: 'test'
+  ...
+# Subtest: a stale PID never stops an unrelated process
+ok 8 - a stale PID never stops an unrelated process
+  ---
+  duration_ms: 219.09562
+  type: 'test'
+  ...
+# Subtest: an occupied port is rejected even if its health endpoint says ok
+ok 9 - an occupied port is rejected even if its health endpoint says ok
+  ---
+  duration_ms: 183.590925
+  type: 'test'
+  ...
+# Subtest: a failed background launch reports failure and removes its PID state
+ok 10 - a failed background launch reports failure and removes its PID state
+  ---
+  duration_ms: 570.591948
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 9
+# fail 0
+# cancelled 0
+# skipped 1
+# todo 0
+# duration_ms 33001.73265

@@ -148,6 +148,94 @@ function Describe-Acl([string]$Path) {
   return acl;
 }
 
+async function interceptDownloads(h, failures) {
+  const curl = await run("sh", ["-c", "command -v curl"], h.env);
+  assert.equal(curl.code, 0, curl.text);
+  const wrapperDirectory = path.join(h.directory, "curl wrapper");
+  const log = path.join(h.directory, "curl-requests.json");
+  await mkdir(wrapperDirectory);
+  await writeFile(path.join(wrapperDirectory, "curl"), `#!/usr/bin/env node
+const fs = require("node:fs");
+const { spawnSync } = require("node:child_process");
+const args = process.argv.slice(2);
+const uri = args.at(-1);
+const invoke = () => { const result = spawnSync(process.env.CODE_WORKSPACE_TEST_REAL_CURL, args, { stdio: "inherit" }); process.exit(result.status ?? 1); };
+if (!uri.includes("/releases/")) invoke();
+const log = process.env.CODE_WORKSPACE_TEST_CURL_LOG;
+const requests = fs.existsSync(log) ? JSON.parse(fs.readFileSync(log, "utf8")) : [];
+const kind = uri.endsWith(".sha256") ? "checksum" : "archive";
+const previous = requests.filter(request => request.kind === kind).length;
+const destination = args[args.indexOf("-o") + 1];
+const http1 = args.includes("--http1.1");
+requests.push({ kind, http1, destination, partialExisted: fs.existsSync(destination) });
+fs.writeFileSync(log, JSON.stringify(requests));
+const failure = !http1 ? { code: 16, http: "000" } : JSON.parse(process.env.CODE_WORKSPACE_TEST_CURL_FAILURES)[kind]?.[previous];
+if (failure) {
+  fs.writeFileSync(destination, "incomplete download");
+  if (args.includes("--write-out")) process.stdout.write(failure.http ?? "000");
+  console.error("Injected curl transfer failure: " + failure.code);
+  process.exit(failure.code);
+}
+invoke();
+`);
+  await chmod(path.join(wrapperDirectory, "curl"), 0o755);
+  Object.assign(h.env, {
+    PATH: `${wrapperDirectory}${path.delimiter}${h.env.PATH}`,
+    CODE_WORKSPACE_TEST_REAL_CURL: curl.text.trim(),
+    CODE_WORKSPACE_TEST_CURL_LOG: log,
+    CODE_WORKSPACE_TEST_CURL_FAILURES: JSON.stringify(failures)
+  });
+  return async () => JSON.parse(await readFile(log, "utf8"));
+}
+
+test("shell installer uses HTTP/1.1 and retries incomplete downloads and HTTP service errors", { skip: windows, timeout: 60_000 }, async () => {
+  await harness(async h => {
+    h.setArchive(await fixtureArchive(h.directory, "1.0.0"));
+    const requests = await interceptDownloads(h, { archive: [{ code: 18 }, { code: 22, http: "503" }], checksum: [{ code: 56 }] });
+    const result = await h.install();
+    assert.equal(result.code, 0, result.text);
+    assert.match(result.text, /正在重试/);
+    assert.equal((await (await fetch(`${h.url}/health`)).json()).version, "1.0.0");
+    const calls = await requests();
+    assert.deepEqual(calls.map(call => call.kind), ["archive", "archive", "archive", "checksum", "checksum"]);
+    assert.ok(calls.every(call => call.http1 && !call.partialExisted && call.destination.endsWith(".part")));
+    for (const call of calls) await assert.rejects(stat(call.destination), { code: "ENOENT" });
+  });
+});
+
+test("shell installer limits failed transfer retries and preserves a running installation", { skip: windows, timeout: 60_000 }, async () => {
+  await harness(async h => {
+    h.setArchive(await fixtureArchive(h.directory, "1.0.0"));
+    const installed = await h.install();
+    assert.equal(installed.code, 0, installed.text);
+    const config = await readFile(h.configPath, "utf8");
+    const pidPath = path.join(h.env.XDG_STATE_HOME, "code-workspace/server.pid");
+    const pid = await readFile(pidPath, "utf8");
+    const requests = await interceptDownloads(h, { archive: Array.from({ length: 4 }, () => ({ code: 16 })) });
+    const failed = await h.install();
+    assert.notEqual(failed.code, 0);
+    assert.match(failed.text, /下载发布包失败/);
+    assert.equal((await (await fetch(`${h.url}/health`)).json()).version, "1.0.0");
+    assert.equal(await readFile(h.configPath, "utf8"), config);
+    assert.equal(await readFile(pidPath, "utf8"), pid);
+    const calls = await requests();
+    assert.equal(calls.length, 4);
+    assert.ok(calls.every(call => call.kind === "archive" && call.http1 && !call.partialExisted));
+    for (const call of calls) await assert.rejects(stat(call.destination), { code: "ENOENT" });
+  });
+});
+
+test("shell installer does not retry a missing release or create an installation", { skip: windows, timeout: 30_000 }, async () => {
+  await harness(async h => {
+    const requests = await interceptDownloads(h, { archive: [{ code: 22, http: "404" }] });
+    const result = await h.install();
+    assert.notEqual(result.code, 0);
+    assert.equal((await requests()).length, 1);
+    await assert.rejects(stat(h.configPath), { code: "ENOENT" });
+    await assert.rejects(stat(path.join(h.env.CODE_WORKSPACE_HOME, "current")), { code: "ENOENT" });
+  });
+});
+
 test("installer starts a fresh release, preserves config on reinstall, and runs the upgraded version", { timeout: 120_000 }, async () => {
   await harness(async h => {
     const oldArchive = await fixtureArchive(h.directory, "1.0.0");

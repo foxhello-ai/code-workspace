@@ -63,7 +63,7 @@ npm start
 **macOS / Linux：**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | bash
+curl --http1.1 -fsSL https://raw.githubusercontent.com/foxhello-ai/code-workspace/main/scripts/install.sh | bash
 ```
 
 **Windows 11 x64（在 PowerShell 中执行）：**
