@@ -67,6 +67,11 @@ async function fixtureArchive(directory, version) {
   await writeFile(path.join(stage, "package.json"), JSON.stringify({ version }));
   await copyFile(path.join(root, "bin/code-workspace"), path.join(stage, "bin/code-workspace"));
   for (const name of ["code-workspace.mjs", "code-workspace.cmd"]) await copyFile(path.join(root, "bin", name), path.join(stage, "bin", name));
+  await copyFile(path.join(root, "bin/web-release.mjs"), path.join(stage, "bin/web-release.mjs"));
+  await mkdir(path.join(stage, "dist/web/assets"), { recursive: true });
+  const assetName = `app-${createHash("sha256").update(version).digest("hex").slice(0, 8)}.js`;
+  await writeFile(path.join(stage, "dist/web/index.html"), `<script type="module" src="/assets/${assetName}"></script>`);
+  await writeFile(path.join(stage, "dist/web/assets", assetName), `export default ${JSON.stringify(version)};`);
   await chmod(path.join(stage, "bin/code-workspace"), 0o755);
   await writeFile(path.join(stage, "dist/server/server/index.js"), `
 const http = require("node:http");
@@ -263,6 +268,8 @@ test("installer starts a fresh release, preserves config on reinstall, and runs 
     result = await h.install();
     assert.equal(result.code, 0, result.text);
     assert.equal((await (await fetch(`${h.url}/health`)).json()).version, "1.0.1");
+    const oldAsset = `app-${createHash("sha256").update("1.0.0").digest("hex").slice(0, 8)}.js`;
+    assert.equal(await readFile(path.join(h.env.CODE_WORKSPACE_HOME, "versions/1.0.1/dist/web/assets", oldAsset), "utf8"), 'export default "1.0.0";');
     assert.equal(await readFile(configPath, "utf8"), config);
     if (windows) assert.deepEqual(await windowsConfigAcl(h.env, configPath), originalAcl);
     for (const command of ["status", "restart", "status", "stop", "start"]) {

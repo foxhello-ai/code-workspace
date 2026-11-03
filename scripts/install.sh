@@ -99,12 +99,22 @@ mkdir -p "$APP_HOME/versions" "$BIN_DIR" "$CONFIG_DIR"
 if [ ! -d "$target_dir" ]; then
   mv "$temporary_dir/code-workspace" "$target_dir"
 fi
+# Carry the previous two asset manifests into the inactive release before the
+# service is stopped. Old tabs keep their exact URLs after upgrade or rollback.
+web_release_tool="$target_dir/bin/web-release.mjs"
+if [ ! -f "$web_release_tool" ]; then web_release_tool="$APP_HOME/current/bin/web-release.mjs"; fi
+if [ -f "$web_release_tool" ] && [ -f "$target_dir/dist/web/index.html" ]; then
+  node "$web_release_tool" inherit "$APP_HOME/current/dist/web" "$target_dir/dist/web"
+fi
 # Stop the managed process while current still points to its original installation.
 # Updating the symlink alone does not replace the code already loaded by Node.js.
 if [ -x "$APP_HOME/current/bin/code-workspace" ]; then
   "$APP_HOME/current/bin/code-workspace" stop
 fi
-ln -sfn "$target_dir" "$APP_HOME/current"
+# Rename a prepared symlink instead of unlinking the active pointer first.
+current_link="$APP_HOME/.current-$$"
+ln -s "$target_dir" "$current_link"
+node -e 'require("node:fs").renameSync(process.argv[1], process.argv[2])' "$current_link" "$APP_HOME/current"
 ln -sfn "$APP_HOME/current/bin/code-workspace" "$BIN_DIR/code-workspace"
 chmod +x "$target_dir/bin/code-workspace"
 

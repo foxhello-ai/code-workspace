@@ -110,6 +110,17 @@ try {
     }
     if (-not (Test-Path -LiteralPath $targetDirectory)) { Move-Item -LiteralPath $packageDirectory -Destination $targetDirectory }
 
+    $currentFile = Join-Path $appHome 'current.json'
+    $webReleaseTool = Join-Path $targetDirectory 'bin/web-release.mjs'
+    if (Test-Path -LiteralPath $currentFile) {
+        $previousRelease = [IO.File]::ReadAllText($currentFile) | ConvertFrom-Json
+        if (-not (Test-Path -LiteralPath $webReleaseTool)) { $webReleaseTool = Join-Path $previousRelease.path 'bin/web-release.mjs' }
+        if ((Test-Path -LiteralPath $webReleaseTool) -and (Test-Path -LiteralPath (Join-Path $targetDirectory 'dist/web/index.html'))) {
+            & $nodeExecutable $webReleaseTool inherit (Join-Path $previousRelease.path 'dist/web') (Join-Path $targetDirectory 'dist/web')
+            if ($LASTEXITCODE -ne 0) { throw 'Static asset validation failed; the current service was not stopped.' }
+        }
+    }
+
     $manager = Join-Path $managerDirectory 'code-workspace.mjs'
     if ((Test-Path -LiteralPath $manager) -and (Test-Path -LiteralPath (Join-Path $appHome 'current.json'))) {
         & $nodeExecutable $manager stop
@@ -119,7 +130,6 @@ try {
     if ($binDirectory -ne $managerDirectory) { Copy-Item -LiteralPath $manager -Destination (Join-Path $binDirectory 'code-workspace.mjs') -Force }
     Copy-Item -LiteralPath (Join-Path $targetDirectory 'bin/code-workspace.cmd') -Destination (Join-Path $binDirectory 'code-workspace.cmd') -Force
     [IO.File]::WriteAllText((Join-Path $binDirectory 'installation.json'), (@{ appHome = $appHome } | ConvertTo-Json), $utf8)
-    $currentFile = Join-Path $appHome 'current.json'
     [IO.File]::WriteAllText("$currentFile.tmp", (@{ version = $version; path = $targetDirectory } | ConvertTo-Json), $utf8)
     Move-Item -LiteralPath "$currentFile.tmp" -Destination $currentFile -Force
 
