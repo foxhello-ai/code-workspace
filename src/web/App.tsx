@@ -8,6 +8,7 @@ import { WorktreePanel } from "./GitPanels";
 import { GitWorkspace, RepositorySidebar } from "./GitWorkspace";
 import { api, ApiClientError, apiSessionId } from "./api";
 import { type TextTab, useAppStore } from "./store";
+import { setChunkReloadGuard } from "./chunkRecovery";
 
 type View = "files" | "changes" | "history" | "worktrees";
 const RECENT_WORKSPACES_KEY = "code-workspace.recent-workspaces";
@@ -51,6 +52,8 @@ export function App({ onLogout = () => undefined }: { onLogout?: () => void }) {
   const currentRepository = store.workspace?.git ?? null;
   const initialization = store.workspace?.initialization;
   const gitReady = !initialization || initialization.status === "ready";
+
+  useEffect(() => setChunkReloadGuard(() => !useAppStore.getState().tabs.some(tab => tab.type === "text" && tab.dirty)), []);
 
   useEffect(() => {
     let active = true;

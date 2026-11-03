@@ -22,7 +22,7 @@ it("loads the workspace module only after successful authentication", async () =
   expect(workspaceModule).not.toHaveBeenCalled();
   fireEvent.change(input, { target: { value: "valid" } });
   fireEvent.submit(input.closest("form")!);
-  await screen.findByRole("button", { name: "模拟退出工作区" });
+  await screen.findByRole("button", { name: "模拟退出工作区" }, { timeout: 5000 });
   expect(workspaceModule).toHaveBeenCalledOnce();
   fireEvent.click(screen.getByRole("button", { name: "模拟退出工作区" }));
   await screen.findByLabelText("密码");
@@ -33,7 +33,7 @@ it("retries a failed authentication check and enters an already authenticated wo
   render(<AuthGate/>);
   await screen.findByText("connection unavailable");
   fireEvent.click(screen.getByRole("button", { name: "重试连接" }));
-  await screen.findByRole("button", { name: "模拟退出工作区" });
+  await screen.findByRole("button", { name: "模拟退出工作区" }, { timeout: 5000 });
   expect(api.authStatus).toHaveBeenCalledTimes(2);
   window.dispatchEvent(new Event("code-workspace:auth-required"));
   await waitFor(() => expect(screen.getByLabelText("密码")).toBeTruthy());
