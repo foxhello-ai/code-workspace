@@ -5,6 +5,7 @@ import os from "node:os";
 import { brotliCompressSync, brotliDecompressSync, gzipSync, gunzipSync } from "node:zlib";
 import { buildApp } from "./app.js";
 import { config } from "./config.js";
+import { publishWebRelease } from "../../bin/web-release.mjs";
 
 let root: string;
 let app: Awaited<ReturnType<typeof buildApp>>;
@@ -13,7 +14,7 @@ beforeEach(async () => {
   root = await mkdtemp(path.join(os.tmpdir(), "workspace-static-"));
   await mkdir(path.join(root, "assets"));
   await Promise.all([
-    writeFile(path.join(root, "index.html"), "<!doctype html><title>Code Workspace</title>"),
+    writeFile(path.join(root, "index.html"), '<!doctype html><title>Code Workspace</title><script src="/assets/app-Ab12_cd3.js"></script>'),
     writeFile(path.join(root, "assets", "app-Ab12_cd3.js"), source),
     writeFile(path.join(root, "assets", "app-Ab12_cd3.js.br"), brotliCompressSync(source)),
     writeFile(path.join(root, "assets", "app-Ab12_cd3.js.gz"), gzipSync(source)),
@@ -58,6 +59,45 @@ it("returns uncached 404 for missing chunks instead of serving HTML", async () =
   expect(response.statusCode).toBe(404);
   expect(response.headers["cache-control"]).toBe("no-store");
   expect(response.headers["content-type"]).toContain("application/json");
+});
+
+it("serves complete modules after range requests without mixing compressed representations", async () => {
+  const partial = await app.inject({ url: "/assets/app-Ab12_cd3.js", headers: { range: "bytes=0-19" } });
+  expect(partial.statusCode).toBe(206);
+  expect(partial.body).toBe(source.slice(0, 20));
+  expect(partial.headers["content-range"]).toBe(`bytes 0-19/${Buffer.byteLength(source)}`);
+  for (const encoding of ["identity", "gzip", "br"]) {
+    const full = await app.inject({ url: "/assets/app-Ab12_cd3.js", headers: { "accept-encoding": encoding } });
+    expect(full.statusCode).toBe(200);
+    expect(full.headers["content-range"]).toBeUndefined();
+    expect(Number(full.headers["content-length"])).toBe(full.rawPayload.length);
+    const data = encoding === "gzip" ? gunzipSync(full.rawPayload) : encoding === "br" ? brotliDecompressSync(full.rawPayload) : full.rawPayload;
+    expect(data.toString()).toBe(source);
+  }
+});
+
+it("serves new resources before HTML activation and keeps a previous client's chunks after publication", async () => {
+  const staged = await mkdtemp(path.join(os.tmpdir(), "workspace-staged-"));
+  const oldHtml = (await app.inject({ url: "/" })).body;
+  try {
+    await mkdir(path.join(staged, "assets"));
+    await mkdir(path.join(staged, ".vite"));
+    const nextHtml = '<script src="/assets/entry-87654321.js"></script>';
+    const next = 'export const load = () => import("./WorkspaceRoot-87654321.js");';
+    await writeFile(path.join(staged, "index.html"), nextHtml);
+    await writeFile(path.join(staged, "assets/entry-87654321.js"), next);
+    await writeFile(path.join(staged, "assets/WorkspaceRoot-87654321.js"), 'export default "next";');
+    await writeFile(path.join(staged, ".vite/manifest.json"), JSON.stringify({ entry: { file: "assets/entry-87654321.js", dynamicImports: ["workspace"] }, workspace: { file: "assets/WorkspaceRoot-87654321.js" } }));
+    await publishWebRelease(staged, root, { verifyAssets: async () => {
+      expect((await app.inject({ url: "/" })).body).toBe(oldHtml);
+      expect((await app.inject({ url: "/assets/entry-87654321.js" })).body).toBe(next);
+      const chunk = await app.inject({ url: "/assets/WorkspaceRoot-87654321.js" });
+      expect(chunk.statusCode).toBe(200);
+      expect(chunk.headers["content-type"]).toContain("javascript");
+    } });
+    expect((await app.inject({ url: "/" })).body).toBe(nextHtml);
+    for (const url of ["/assets/app-Ab12_cd3.js", "/assets/entry-87654321.js", "/assets/WorkspaceRoot-87654321.js"]) expect((await app.inject({ url })).statusCode).toBe(200);
+  } finally { await rm(staged, { recursive: true, force: true }); await rm(`${root}.releases`, { recursive: true, force: true }); }
 });
 
 it("never caches authentication responses, API errors or private workspace data", async () => {

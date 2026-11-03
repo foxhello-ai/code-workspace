@@ -7,7 +7,9 @@
     "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "tsx watch src/server/index.ts",
     "dev:web": "vite",
-    "build": "tsc -p tsconfig.server.json && vite build",
+    "build": "node scripts/build.mjs",
+    "web:releases": "node bin/web-release.mjs list dist/web",
+    "web:rollback": "node bin/web-release.mjs rollback dist/web",
     "package:release": "npm run build && node scripts/package-release.mjs",
     "start": "node dist/server/server/index.js",
     "pm2:start": "pm2 start ecosystem.config.cjs --update-env",
@@ -17,8 +19,9 @@
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "vitest run",
     "test:install": "node --test scripts/install.test.mjs scripts/service-manager.test.mjs",
+    "test:release": "node --test scripts/web-release.test.mjs",
     "test:watch": "vitest",
-    "check": "npm run typecheck && npm test && npm run build"
+    "check": "npm run typecheck && npm test && npm run test:release && npm run build"
   },
   "dependencies": {
     "@fastify/static": "^10.1.0",

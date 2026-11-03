@@ -70,7 +70,7 @@ jobs:
         run: npm run typecheck && npm run build
 
       - name: Verify application
-        run: npm test
+        run: npm test && npm run test:release
 
       - name: Build release archive with platform dependencies
         id: package
