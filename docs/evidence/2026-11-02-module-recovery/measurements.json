@@ -1,0 +1,706 @@
+{
+  "date": "2026-11-02",
+  "timezone": "Asia/Shanghai",
+  "publication": {
+    "startedAt": "2026-11-02T13:02:02.544Z",
+    "finishedAt": "2026-11-02T13:03:18.117Z",
+    "buildExit": 0,
+    "oldEntry": "/assets/index-BuWlzUZ1.js",
+    "newEntry": "/assets/index-CAoHI508.js",
+    "oldHtmlSha256": "790e361014bdf5151021b8ef965f2298dd7c1d8d2149d4ef69831196cae020d0",
+    "newHtmlSha256": "1466a125b51057672e3deadad26cb3a72555af4c108b488c118ee720f9100e94",
+    "monitorChecks": 393,
+    "monitorErrors": [],
+    "retainedReleases": [
+      {
+        "id": "be672a02c4f243d070f5",
+        "createdAt": "2026-11-02T13:03:14.393Z",
+        "fileCount": 280
+      },
+      {
+        "id": "c2ba8a71aac4d49e4daa",
+        "createdAt": "2026-11-02T13:03:15.124Z",
+        "fileCount": 280
+      }
+    ],
+    "oldAssetsAfterPublication": [
+      {
+        "name": "/assets/index-BuWlzUZ1.js",
+        "status": 200,
+        "bytes": 202402,
+        "sha256": "47c7895e8c15ed50033629ed2dae1830bb548b9451c46d932b8f3e981d2e9b70",
+        "unchanged": true
+      },
+      {
+        "name": "/assets/EditorRuntime-_J8JTZ0e.js",
+        "status": 200,
+        "bytes": 3318381,
+        "sha256": "6360cfcb653b72d6c61c2906344f26580e691b946192352d9a0d091b0f108b06",
+        "unchanged": true
+      },
+      {
+        "name": "/assets/WorkspaceRoot-4mVyV-hS.js",
+        "status": 200,
+        "bytes": 114298,
+        "sha256": "3f957370415574a58ae238e971350ace51d7854a05961be221338da720f04030",
+        "unchanged": true
+      }
+    ]
+  },
+  "before_publication_network": {
+    "asset": "/assets/WorkspaceRoot-4mVyV-hS.js",
+    "expectedSha256": "3f957370415574a58ae238e971350ace51d7854a05961be221338da720f04030",
+    "results": [
+      {
+        "mode": "direct",
+        "encoding": "br",
+        "round": 1,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 1.104227,
+        "total": 1.344996,
+        "httpVersion": "2",
+        "ssl": 0,
+        "headers": {
+          "content-length": "32677",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-encoding": "br",
+          "vary": "accept-encoding",
+          "cf-cache-status": "HIT",
+          "cf-ray": "a543461dbddcd5a3-AMS"
+        },
+        "rawBytes": 32677,
+        "decodedBytes": 114298,
+        "sha256": "3f957370415574a58ae238e971350ace51d7854a05961be221338da720f04030",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "direct",
+        "encoding": "br",
+        "round": 2,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 1.027726,
+        "total": 1.37274,
+        "httpVersion": "2",
+        "ssl": 0,
+        "headers": {
+          "content-length": "32677",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-encoding": "br",
+          "vary": "accept-encoding",
+          "cf-cache-status": "HIT",
+          "cf-ray": "a5434626ef8e6d99-AMS"
+        },
+        "rawBytes": 32677,
+        "decodedBytes": 114298,
+        "sha256": "3f957370415574a58ae238e971350ace51d7854a05961be221338da720f04030",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "direct",
+        "encoding": "gzip",
+        "round": 1,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 3.171136,
+        "total": 3.782078,
+        "httpVersion": "2",
+        "ssl": 0,
+        "headers": {
+          "cache-control": "public, max-age=31536000, immutable",
+          "vary": "accept-encoding",
+          "cf-cache-status": "MISS",
+          "content-encoding": "gzip",
+          "cf-ray": "a54346355d81d1fb-LHR"
+        },
+        "rawBytes": 34549,
+        "decodedBytes": 114298,
+        "sha256": "3f957370415574a58ae238e971350ace51d7854a05961be221338da720f04030",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "direct",
+        "encoding": "gzip",
+        "round": 2,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 1.066319,
+        "total": 1.070649,
+        "httpVersion": "2",
+        "ssl": 0,
+        "headers": {
+          "cache-control": "public, max-age=31536000, immutable",
+          "vary": "accept-encoding",
+          "cf-cache-status": "HIT",
+          "content-encoding": "gzip",
+          "cf-ray": "a5434647db2a0925-AMS"
+        },
+        "rawBytes": 34682,
+        "decodedBytes": 114298,
+        "sha256": "3f957370415574a58ae238e971350ace51d7854a05961be221338da720f04030",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "system-proxy",
+        "encoding": "br",
+        "round": 1,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 1.289798,
+        "total": 1.867572,
+        "httpVersion": "2",
+        "ssl": 0,
+        "headers": {
+          "content-length": "32677",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-encoding": "br",
+          "vary": "accept-encoding",
+          "cf-cache-status": "MISS",
+          "cf-ray": "a543461aafce854e-HKG"
+        },
+        "rawBytes": 32677,
+        "decodedBytes": 114298,
+        "sha256": "3f957370415574a58ae238e971350ace51d7854a05961be221338da720f04030",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "system-proxy",
+        "encoding": "br",
+        "round": 2,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 0.46283,
+        "total": 0.6105,
+        "httpVersion": "2",
+        "ssl": 0,
+        "headers": {
+          "content-length": "32677",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-encoding": "br",
+          "vary": "accept-encoding",
+          "cf-cache-status": "HIT",
+          "cf-ray": "a5434627380661ec-HKG"
+        },
+        "rawBytes": 32677,
+        "decodedBytes": 114298,
+        "sha256": "3f957370415574a58ae238e971350ace51d7854a05961be221338da720f04030",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "system-proxy",
+        "encoding": "gzip",
+        "round": 1,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 0.33947,
+        "total": 0.684634,
+        "httpVersion": "2",
+        "ssl": 0,
+        "headers": {
+          "cache-control": "public, max-age=31536000, immutable",
+          "vary": "accept-encoding",
+          "cf-cache-status": "HIT",
+          "content-encoding": "gzip",
+          "cf-ray": "a543462aac3d8573-HKG"
+        },
+        "rawBytes": 34682,
+        "decodedBytes": 114298,
+        "sha256": "3f957370415574a58ae238e971350ace51d7854a05961be221338da720f04030",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "system-proxy",
+        "encoding": "gzip",
+        "round": 2,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 0.438817,
+        "total": 0.486752,
+        "httpVersion": "2",
+        "ssl": 0,
+        "headers": {
+          "cache-control": "public, max-age=31536000, immutable",
+          "vary": "accept-encoding",
+          "cf-cache-status": "HIT",
+          "content-encoding": "gzip",
+          "cf-ray": "a54346302af1c5e8-HKG"
+        },
+        "rawBytes": 34682,
+        "decodedBytes": 114298,
+        "sha256": "3f957370415574a58ae238e971350ace51d7854a05961be221338da720f04030",
+        "matchesOrigin": true
+      }
+    ]
+  },
+  "after_publication_network": {
+    "entry": "/assets/index-CAoHI508.js",
+    "workspace": "/assets/WorkspaceRoot-BtBcwAf1.js",
+    "oldWorkspace": "/assets/WorkspaceRoot-4mVyV-hS.js",
+    "results": [
+      {
+        "mode": "direct",
+        "url": "/",
+        "round": 1,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 2.077947,
+        "total": 2.078817,
+        "ssl": 0,
+        "headers": {
+          "cache-control": "no-cache",
+          "vary": "accept-encoding",
+          "cf-cache-status": "DYNAMIC",
+          "content-encoding": "br",
+          "cf-ray": "a543580bbd6fb128-MAN"
+        },
+        "rawBytes": 1255,
+        "decodedBytes": 2833,
+        "sha256": "1466a125b51057672e3deadad26cb3a72555af4c108b488c118ee720f9100e94",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "direct",
+        "url": "/assets/index-CAoHI508.js",
+        "round": 1,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 1.541746,
+        "total": 2.06419,
+        "ssl": 0,
+        "headers": {
+          "content-length": "61110",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-encoding": "br",
+          "vary": "accept-encoding",
+          "cf-cache-status": "MISS",
+          "cf-ray": "a5435815be4c7717-LHR"
+        },
+        "rawBytes": 61110,
+        "decodedBytes": 203308,
+        "sha256": "391c91e47484d5e7033b308a281cc35a48c8926575dc0c46a6edac167694a918",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "direct",
+        "url": "/assets/index-CAoHI508.js",
+        "round": 2,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 1.532507,
+        "total": 2.258927,
+        "ssl": 0,
+        "headers": {
+          "content-length": "61110",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-encoding": "br",
+          "vary": "accept-encoding",
+          "cf-cache-status": "MISS",
+          "cf-ray": "a54358229f955d67-FRA"
+        },
+        "rawBytes": 61110,
+        "decodedBytes": 203308,
+        "sha256": "391c91e47484d5e7033b308a281cc35a48c8926575dc0c46a6edac167694a918",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "direct",
+        "url": "/assets/WorkspaceRoot-BtBcwAf1.js",
+        "round": 1,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 2.902477,
+        "total": 4.475859,
+        "ssl": 0,
+        "headers": {
+          "content-length": "32709",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-encoding": "br",
+          "vary": "accept-encoding",
+          "cf-cache-status": "MISS",
+          "cf-ray": "a5435837784bb3fe-MAN"
+        },
+        "rawBytes": 32709,
+        "decodedBytes": 114387,
+        "sha256": "fb0c23931bea783fc7305fa6640c3ece913785ef303f44a1a4205a2a10656634",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "direct",
+        "url": "/assets/WorkspaceRoot-BtBcwAf1.js",
+        "round": 2,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 2.588086,
+        "total": 4.68526,
+        "ssl": 0,
+        "headers": {
+          "content-length": "32709",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-encoding": "br",
+          "vary": "accept-encoding",
+          "cf-cache-status": "MISS",
+          "cf-ray": "a5435853d8bd24dd-FRA"
+        },
+        "rawBytes": 32709,
+        "decodedBytes": 114387,
+        "sha256": "fb0c23931bea783fc7305fa6640c3ece913785ef303f44a1a4205a2a10656634",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "direct",
+        "url": "/assets/WorkspaceRoot-4mVyV-hS.js",
+        "round": 1,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 1.077825,
+        "total": 1.407993,
+        "ssl": 0,
+        "headers": {
+          "content-length": "32677",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-encoding": "br",
+          "vary": "accept-encoding",
+          "cf-cache-status": "HIT",
+          "cf-ray": "a543586c8c6788a7-LHR"
+        },
+        "rawBytes": 32677,
+        "decodedBytes": 114298,
+        "sha256": "3f957370415574a58ae238e971350ace51d7854a05961be221338da720f04030",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "direct",
+        "url": "/assets/WorkspaceRoot-4mVyV-hS.js",
+        "round": 2,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 1.143458,
+        "total": 1.442949,
+        "ssl": 0,
+        "headers": {
+          "content-length": "32677",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-encoding": "br",
+          "vary": "accept-encoding",
+          "cf-cache-status": "HIT",
+          "cf-ray": "a54358760bdda928-LHR"
+        },
+        "rawBytes": 32677,
+        "decodedBytes": 114298,
+        "sha256": "3f957370415574a58ae238e971350ace51d7854a05961be221338da720f04030",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "system-proxy",
+        "url": "/",
+        "round": 1,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 1.738097,
+        "total": 1.739092,
+        "ssl": 0,
+        "headers": {
+          "cache-control": "no-cache",
+          "vary": "accept-encoding",
+          "cf-cache-status": "DYNAMIC",
+          "content-encoding": "br",
+          "cf-ray": "a543580d2ef84e43-LAX"
+        },
+        "rawBytes": 1255,
+        "decodedBytes": 2833,
+        "sha256": "1466a125b51057672e3deadad26cb3a72555af4c108b488c118ee720f9100e94",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "system-proxy",
+        "url": "/assets/index-CAoHI508.js",
+        "round": 1,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 1.538093,
+        "total": 1.856446,
+        "ssl": 0,
+        "headers": {
+          "content-length": "61110",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-encoding": "br",
+          "vary": "accept-encoding",
+          "cf-cache-status": "MISS",
+          "cf-ray": "a54358146ed0e36d-NRT"
+        },
+        "rawBytes": 61110,
+        "decodedBytes": 203308,
+        "sha256": "391c91e47484d5e7033b308a281cc35a48c8926575dc0c46a6edac167694a918",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "system-proxy",
+        "url": "/assets/index-CAoHI508.js",
+        "round": 2,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 0.861655,
+        "total": 1.097262,
+        "ssl": 0,
+        "headers": {
+          "content-length": "61110",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-encoding": "br",
+          "vary": "accept-encoding",
+          "cf-cache-status": "HIT",
+          "cf-ray": "a54358203980293d-NRT"
+        },
+        "rawBytes": 61110,
+        "decodedBytes": 203308,
+        "sha256": "391c91e47484d5e7033b308a281cc35a48c8926575dc0c46a6edac167694a918",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "system-proxy",
+        "url": "/assets/WorkspaceRoot-BtBcwAf1.js",
+        "round": 1,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 1.450128,
+        "total": 1.657479,
+        "ssl": 0,
+        "headers": {
+          "content-length": "32709",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-encoding": "br",
+          "vary": "accept-encoding",
+          "cf-cache-status": "MISS",
+          "cf-ray": "a5435826eb239a37-NRT"
+        },
+        "rawBytes": 32709,
+        "decodedBytes": 114387,
+        "sha256": "fb0c23931bea783fc7305fa6640c3ece913785ef303f44a1a4205a2a10656634",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "system-proxy",
+        "url": "/assets/WorkspaceRoot-BtBcwAf1.js",
+        "round": 2,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 1.019331,
+        "total": 1.297025,
+        "ssl": 0,
+        "headers": {
+          "content-length": "32709",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-encoding": "br",
+          "vary": "accept-encoding",
+          "cf-cache-status": "HIT",
+          "cf-ray": "a54358335ee6b009-NRT"
+        },
+        "rawBytes": 32709,
+        "decodedBytes": 114387,
+        "sha256": "fb0c23931bea783fc7305fa6640c3ece913785ef303f44a1a4205a2a10656634",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "system-proxy",
+        "url": "/assets/WorkspaceRoot-4mVyV-hS.js",
+        "round": 1,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 1.536087,
+        "total": 1.63836,
+        "ssl": 0,
+        "headers": {
+          "content-length": "32677",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-encoding": "br",
+          "vary": "accept-encoding",
+          "cf-cache-status": "HIT",
+          "cf-ray": "a543583dbd697e2f-NRT"
+        },
+        "rawBytes": 32677,
+        "decodedBytes": 114298,
+        "sha256": "3f957370415574a58ae238e971350ace51d7854a05961be221338da720f04030",
+        "matchesOrigin": true
+      },
+      {
+        "mode": "system-proxy",
+        "url": "/assets/WorkspaceRoot-4mVyV-hS.js",
+        "round": 2,
+        "exit": 0,
+        "error": "",
+        "status": 200,
+        "ttfb": 0.887474,
+        "total": 0.990697,
+        "ssl": 0,
+        "headers": {
+          "content-length": "32677",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-encoding": "br",
+          "vary": "accept-encoding",
+          "cf-cache-status": "HIT",
+          "cf-ray": "a54358448905520d-NRT"
+        },
+        "rawBytes": 32677,
+        "decodedBytes": 114298,
+        "sha256": "3f957370415574a58ae238e971350ace51d7854a05961be221338da720f04030",
+        "matchesOrigin": true
+      }
+    ]
+  },
+  "connection_reuse": {
+    "exit": 0,
+    "stderr": "",
+    "results": [
+      {
+        "url": "/",
+        "status": 200,
+        "total": 1.400744,
+        "newConnections": 1,
+        "connectionId": 0,
+        "headers": {
+          "cf-cache-status": "DYNAMIC",
+          "content-encoding": "br",
+          "cf-ray": "a5435b490e42deb3-NRT"
+        },
+        "decodedBytes": 2833,
+        "matchesOrigin": true
+      },
+      {
+        "url": "/assets/WorkspaceRoot-BtBcwAf1.js",
+        "status": 200,
+        "total": 0.177828,
+        "newConnections": 0,
+        "connectionId": 0,
+        "headers": {
+          "content-length": "32709",
+          "content-encoding": "br",
+          "cf-cache-status": "HIT",
+          "cf-ray": "a5435b4e1fc7deb3-NRT"
+        },
+        "decodedBytes": 114387,
+        "matchesOrigin": true
+      },
+      {
+        "url": "/assets/WorkspaceRoot-BtBcwAf1.js",
+        "status": 200,
+        "total": 0.150636,
+        "newConnections": 0,
+        "connectionId": 0,
+        "headers": {
+          "content-length": "32709",
+          "content-encoding": "br",
+          "cf-cache-status": "HIT",
+          "cf-ray": "a5435b4f3b68deb3-NRT"
+        },
+        "decodedBytes": 114387,
+        "matchesOrigin": true
+      },
+      {
+        "url": "/assets/WorkspaceRoot-BtBcwAf1.js",
+        "status": 200,
+        "total": 0.358115,
+        "newConnections": 0,
+        "connectionId": 0,
+        "headers": {
+          "content-length": "32709",
+          "content-encoding": "br",
+          "cf-cache-status": "HIT",
+          "cf-ray": "a5435b502ea1deb3-NRT"
+        },
+        "decodedBytes": 114387,
+        "matchesOrigin": true
+      },
+      {
+        "url": "/assets/WorkspaceRoot-4mVyV-hS.js",
+        "status": 200,
+        "total": 0.1527,
+        "newConnections": 0,
+        "connectionId": 0,
+        "headers": {
+          "content-length": "32677",
+          "content-encoding": "br",
+          "cf-cache-status": "HIT",
+          "cf-ray": "a5435b526e2bdeb3-NRT"
+        },
+        "decodedBytes": 114298,
+        "matchesOrigin": true
+      }
+    ]
+  },
+  "validation": {
+    "typecheck": "passed",
+    "application": {
+      "command": "npm test -- --maxWorkers=2",
+      "passed": 84,
+      "files": 15
+    },
+    "publication_tests": {
+      "command": "npm run test:release",
+      "passed": 9
+    },
+    "installer_and_package": {
+      "command": "CODE_WORKSPACE_TEST_ARCHIVE=release/code-workspace-1.2.0.tar.gz node --test scripts/install.test.mjs scripts/service-manager.test.mjs",
+      "passed": 10,
+      "skipped": 0
+    },
+    "http_validation_before_activation": 96,
+    "unsafe_vite_output_guard": {
+      "blocked": true,
+      "htmlUnchanged": true
+    },
+    "browser": "Unavailable due to browser connector authentication; no browser-console acceptance claimed.",
+    "windows": "CI configured; not run on this macOS host."
+  },
+  "cloudflare_plan": {
+    "status": "not_executed_missing_management_login",
+    "temporaryCacheRule": {
+      "expression": "(http.host eq \"workspace.foxhello.cn\" and starts_with(http.request.uri.path, \"/assets/\"))",
+      "action": "set_cache_settings",
+      "action_parameters": {
+        "cache": false
+      }
+    },
+    "purge": {
+      "files": [
+        "https://workspace.foxhello.cn/",
+        "https://workspace.foxhello.cn/index.html",
+        "https://workspace.foxhello.cn/assets/index-CAoHI508.js",
+        "https://workspace.foxhello.cn/assets/WorkspaceRoot-BtBcwAf1.js",
+        "https://workspace.foxhello.cn/assets/index-BuWlzUZ1.js",
+        "https://workspace.foxhello.cn/assets/WorkspaceRoot-4mVyV-hS.js"
+      ]
+    },
+    "remainingAcceptance": [
+      "LAX module repeated full-response HIT sampling",
+      "temporary scoped Cache Bypass comparison",
+      "restore cache and repeat MISS to HIT after diagnosis"
+    ]
+  },
+  "historical_unresolved_path": {
+    "url": "https://workspace.foxhello.cn/assets/workspaceRoot-4mVyy-hS.js",
+    "observedStatus": 404,
+    "originalArtifactFound": false,
+    "aliasedToCurrentModule": false
+  }
+}

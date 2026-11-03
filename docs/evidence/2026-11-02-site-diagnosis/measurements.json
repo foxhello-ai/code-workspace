@@ -1,0 +1,978 @@
+{
+  "date": "2026-11-02",
+  "timezone": "Asia/Shanghai",
+  "site": "https://workspace.foxhello.cn/",
+  "method": "Independent curl processes with certificate verification and gzip decompression; 3 samples direct, 2 samples through existing system proxy. Sequential sample reuses one connection. No login or user-workspace mutation.",
+  "direct": [
+    {
+      "name": "local_html",
+      "url": "http://127.0.0.1:43110/",
+      "samples": [
+        {
+          "status": "200",
+          "ip": "127.0.0.1",
+          "version": "1.1",
+          "dns": "0.001976",
+          "connect": "0.002618",
+          "tls": "0.000000",
+          "ttfb": "0.010546",
+          "total": "0.010800",
+          "bytes": "2833",
+          "redirect": "",
+          "ssl_verify": "0",
+          "round": 1,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "cache-control": "no-cache",
+            "content-type": "text/html; charset=utf-8",
+            "content-length": "2833"
+          }
+        },
+        {
+          "status": "200",
+          "ip": "127.0.0.1",
+          "version": "1.1",
+          "dns": "0.000528",
+          "connect": "0.000944",
+          "tls": "0.000000",
+          "ttfb": "0.004143",
+          "total": "0.004354",
+          "bytes": "2833",
+          "redirect": "",
+          "ssl_verify": "0",
+          "round": 2,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "cache-control": "no-cache",
+            "content-type": "text/html; charset=utf-8",
+            "content-length": "2833"
+          }
+        },
+        {
+          "status": "200",
+          "ip": "127.0.0.1",
+          "version": "1.1",
+          "dns": "0.000331",
+          "connect": "0.000642",
+          "tls": "0.000000",
+          "ttfb": "0.002657",
+          "total": "0.002856",
+          "bytes": "2833",
+          "redirect": "",
+          "ssl_verify": "0",
+          "round": 3,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "cache-control": "no-cache",
+            "content-type": "text/html; charset=utf-8",
+            "content-length": "2833"
+          }
+        }
+      ]
+    },
+    {
+      "name": "local_auth",
+      "url": "http://127.0.0.1:43110/api/auth/status",
+      "samples": [
+        {
+          "status": "200",
+          "ip": "127.0.0.1",
+          "version": "1.1",
+          "dns": "0.001732",
+          "connect": "0.002987",
+          "tls": "0.000000",
+          "ttfb": "0.005633",
+          "total": "0.005875",
+          "bytes": "83",
+          "redirect": "",
+          "ssl_verify": "0",
+          "round": 1,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "cache-control": "no-store",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "83"
+          }
+        },
+        {
+          "status": "200",
+          "ip": "127.0.0.1",
+          "version": "1.1",
+          "dns": "0.000423",
+          "connect": "0.000732",
+          "tls": "0.000000",
+          "ttfb": "0.001667",
+          "total": "0.001855",
+          "bytes": "83",
+          "redirect": "",
+          "ssl_verify": "0",
+          "round": 2,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "cache-control": "no-store",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "83"
+          }
+        },
+        {
+          "status": "200",
+          "ip": "127.0.0.1",
+          "version": "1.1",
+          "dns": "0.000302",
+          "connect": "0.000666",
+          "tls": "0.000000",
+          "ttfb": "0.001829",
+          "total": "0.002023",
+          "bytes": "83",
+          "redirect": "",
+          "ssl_verify": "0",
+          "round": 3,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "cache-control": "no-store",
+            "content-type": "application/json; charset=utf-8",
+            "content-length": "83"
+          }
+        }
+      ]
+    },
+    {
+      "name": "http_html",
+      "url": "http://workspace.foxhello.cn/",
+      "samples": [
+        {
+          "status": "200",
+          "ip": "172.67.195.65",
+          "version": "1.1",
+          "dns": "0.018973",
+          "connect": "0.472217",
+          "tls": "0.000000",
+          "ttfb": "1.643415",
+          "total": "1.643791",
+          "bytes": "1344",
+          "redirect": "",
+          "ssl_verify": "0",
+          "round": 1,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "no-cache",
+            "cf-cache-status": "DYNAMIC",
+            "content-encoding": "gzip",
+            "server": "cloudflare",
+            "cf-ray": "a5413215bb577aa3-AMS"
+          }
+        },
+        {
+          "status": "200",
+          "ip": "104.21.20.254",
+          "version": "1.1",
+          "dns": "0.004114",
+          "connect": "0.179319",
+          "tls": "0.000000",
+          "ttfb": "1.149959",
+          "total": "1.927688",
+          "bytes": "1344",
+          "redirect": "",
+          "ssl_verify": "0",
+          "round": 2,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "no-cache",
+            "cf-cache-status": "DYNAMIC",
+            "content-encoding": "gzip",
+            "server": "cloudflare",
+            "cf-ray": "a541321e1e650b75-AMS"
+          }
+        },
+        {
+          "status": "200",
+          "ip": "104.21.20.254",
+          "version": "1.1",
+          "dns": "0.006359",
+          "connect": "0.280883",
+          "tls": "0.000000",
+          "ttfb": "1.860317",
+          "total": "1.860801",
+          "bytes": "1344",
+          "redirect": "",
+          "ssl_verify": "0",
+          "round": 3,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "no-cache",
+            "cf-cache-status": "DYNAMIC",
+            "content-encoding": "gzip",
+            "server": "cloudflare",
+            "cf-ray": "a541322b3da35c37-AMS"
+          }
+        }
+      ]
+    },
+    {
+      "name": "https_html",
+      "url": "https://workspace.foxhello.cn/",
+      "samples": [
+        {
+          "status": "200",
+          "ip": "172.67.195.65",
+          "version": "2",
+          "dns": "0.019685",
+          "connect": "0.385647",
+          "tls": "0.680691",
+          "ttfb": "2.775050",
+          "total": "2.775609",
+          "bytes": "1344",
+          "redirect": "",
+          "ssl_verify": "0",
+          "round": 1,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "no-cache",
+            "cf-cache-status": "DYNAMIC",
+            "content-encoding": "gzip",
+            "server": "cloudflare",
+            "cf-ray": "a54132175ce20666-AMS"
+          }
+        },
+        {
+          "status": "200",
+          "ip": "104.21.20.254",
+          "version": "2",
+          "dns": "0.003675",
+          "connect": "0.255746",
+          "tls": "0.750011",
+          "ttfb": "2.123010",
+          "total": "2.123489",
+          "bytes": "1344",
+          "redirect": "",
+          "ssl_verify": "0",
+          "round": 2,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "no-cache",
+            "cf-cache-status": "DYNAMIC",
+            "content-encoding": "gzip",
+            "server": "cloudflare",
+            "cf-ray": "a54132294fad95ab-AMS"
+          }
+        },
+        {
+          "status": "200",
+          "ip": "104.21.20.254",
+          "version": "2",
+          "dns": "0.004714",
+          "connect": "0.492836",
+          "tls": "1.058919",
+          "ttfb": "2.806850",
+          "total": "2.807376",
+          "bytes": "1344",
+          "redirect": "",
+          "ssl_verify": "0",
+          "round": 3,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "no-cache",
+            "cf-cache-status": "DYNAMIC",
+            "content-encoding": "gzip",
+            "server": "cloudflare",
+            "cf-ray": "a5413238b9333751-AMS"
+          }
+        }
+      ]
+    },
+    {
+      "name": "https_auth",
+      "url": "https://workspace.foxhello.cn/api/auth/status",
+      "samples": [
+        {
+          "status": "200",
+          "ip": "172.67.195.65",
+          "version": "2",
+          "dns": "0.008871",
+          "connect": "0.311490",
+          "tls": "0.534080",
+          "ttfb": "2.231024",
+          "total": "2.231506",
+          "bytes": "98",
+          "redirect": "",
+          "ssl_verify": "0",
+          "round": 1,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "no-store",
+            "cf-cache-status": "DYNAMIC",
+            "content-encoding": "gzip",
+            "server": "cloudflare",
+            "cf-ray": "a54132163984fba8-AMS"
+          }
+        },
+        {
+          "status": "200",
+          "ip": "104.21.20.254",
+          "version": "2",
+          "dns": "0.003750",
+          "connect": "0.253976",
+          "tls": "0.511117",
+          "ttfb": "1.558993",
+          "total": "1.559495",
+          "bytes": "98",
+          "redirect": "",
+          "ssl_verify": "0",
+          "round": 2,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "no-store",
+            "cf-cache-status": "DYNAMIC",
+            "content-encoding": "gzip",
+            "server": "cloudflare",
+            "cf-ray": "a54132248a69fffd-AMS"
+          }
+        },
+        {
+          "status": "200",
+          "ip": "104.21.20.254",
+          "version": "2",
+          "dns": "0.003832",
+          "connect": "0.236840",
+          "tls": "0.574660",
+          "ttfb": "1.582119",
+          "total": "1.582693",
+          "bytes": "98",
+          "redirect": "",
+          "ssl_verify": "0",
+          "round": 3,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "no-store",
+            "cf-cache-status": "DYNAMIC",
+            "content-encoding": "gzip",
+            "server": "cloudflare",
+            "cf-ray": "a541322ec85bdce7-AMS"
+          }
+        }
+      ]
+    },
+    {
+      "name": "https_asset",
+      "url": "https://workspace.foxhello.cn/assets/index-BuWlzUZ1.js",
+      "samples": [
+        {
+          "status": "200",
+          "ip": "172.67.195.65",
+          "version": "2",
+          "dns": "0.006003",
+          "connect": "0.372521",
+          "tls": "0.654826",
+          "ttfb": "2.222855",
+          "total": "3.528087",
+          "bytes": "64238",
+          "redirect": "",
+          "ssl_verify": "0",
+          "round": 1,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "content-type": "application/javascript; charset=utf-8",
+            "cache-control": "public, max-age=31536000, immutable",
+            "cf-cache-status": "MISS",
+            "content-encoding": "gzip",
+            "server": "cloudflare",
+            "cf-ray": "a541321758a76e50-AMS"
+          }
+        },
+        {
+          "status": "200",
+          "ip": "104.21.20.254",
+          "version": "2",
+          "dns": "0.005838",
+          "connect": "1.335531",
+          "tls": "1.564872",
+          "ttfb": "1.860114",
+          "total": "3.367771",
+          "bytes": "64158",
+          "redirect": "",
+          "ssl_verify": "0",
+          "round": 2,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "content-type": "application/javascript; charset=utf-8",
+            "cache-control": "public, max-age=31536000, immutable",
+            "age": "3",
+            "cf-cache-status": "HIT",
+            "content-encoding": "gzip",
+            "server": "cloudflare",
+            "cf-ray": "a54132334d412f85-AMS"
+          }
+        },
+        {
+          "status": "200",
+          "ip": "104.21.20.254",
+          "version": "2",
+          "dns": "0.003957",
+          "connect": "0.217922",
+          "tls": "0.502052",
+          "ttfb": "0.753293",
+          "total": "1.544263",
+          "bytes": "64158",
+          "redirect": "",
+          "ssl_verify": "0",
+          "round": 3,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "content-type": "application/javascript; charset=utf-8",
+            "cache-control": "public, max-age=31536000, immutable",
+            "age": "5",
+            "cf-cache-status": "HIT",
+            "content-encoding": "gzip",
+            "server": "cloudflare",
+            "cf-ray": "a5413241a8d2b121-AMS"
+          }
+        }
+      ]
+    }
+  ],
+  "proxy": [
+    {
+      "name": "proxy_html",
+      "url": "https://workspace.foxhello.cn/",
+      "samples": [
+        {
+          "status": "200",
+          "ip": "127.0.0.1",
+          "dns": "0.000348",
+          "connect": "0.000643",
+          "tls": "0.646153",
+          "ttfb": "1.785688",
+          "total": "1.786168",
+          "bytes": "1344",
+          "ssl_verify": "0",
+          "round": 1,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "cache-control": "no-cache",
+            "cf-cache-status": "DYNAMIC",
+            "content-encoding": "gzip",
+            "server": "cloudflare",
+            "cf-ray": "a54134e988df2c1c-NRT"
+          }
+        },
+        {
+          "status": "200",
+          "ip": "127.0.0.1",
+          "dns": "0.000280",
+          "connect": "0.000549",
+          "tls": "0.845061",
+          "ttfb": "1.536031",
+          "total": "1.820038",
+          "bytes": "1344",
+          "ssl_verify": "0",
+          "round": 2,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "cache-control": "no-cache",
+            "cf-cache-status": "DYNAMIC",
+            "content-encoding": "gzip",
+            "server": "cloudflare",
+            "cf-ray": "a54134f56cbee363-NRT"
+          }
+        }
+      ]
+    },
+    {
+      "name": "proxy_asset",
+      "url": "https://workspace.foxhello.cn/assets/index-BuWlzUZ1.js",
+      "samples": [
+        {
+          "status": "200",
+          "ip": "127.0.0.1",
+          "dns": "0.000266",
+          "connect": "0.000732",
+          "tls": "0.645532",
+          "ttfb": "1.586516",
+          "total": "3.135828",
+          "bytes": "64206",
+          "ssl_verify": "0",
+          "round": 1,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "cache-control": "public, max-age=31536000, immutable",
+            "cf-cache-status": "MISS",
+            "content-encoding": "gzip",
+            "server": "cloudflare",
+            "cf-ray": "a54134e979c1fd43-NRT"
+          }
+        },
+        {
+          "status": "200",
+          "ip": "127.0.0.1",
+          "dns": "0.000287",
+          "connect": "0.000567",
+          "tls": "0.584154",
+          "ttfb": "0.967494",
+          "total": "1.067784",
+          "bytes": "64158",
+          "ssl_verify": "0",
+          "round": 2,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "cache-control": "public, max-age=31536000, immutable",
+            "age": "2",
+            "cf-cache-status": "HIT",
+            "content-encoding": "gzip",
+            "server": "cloudflare",
+            "cf-ray": "a54134fc3f8ed4dd-NRT"
+          }
+        }
+      ]
+    },
+    {
+      "name": "proxy_auth",
+      "url": "https://workspace.foxhello.cn/api/auth/status",
+      "samples": [
+        {
+          "status": "200",
+          "ip": "127.0.0.1",
+          "dns": "0.000296",
+          "connect": "0.000652",
+          "tls": "0.626858",
+          "ttfb": "1.567607",
+          "total": "1.567930",
+          "bytes": "98",
+          "ssl_verify": "0",
+          "round": 1,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "cache-control": "no-store",
+            "cf-cache-status": "DYNAMIC",
+            "content-encoding": "gzip",
+            "server": "cloudflare",
+            "cf-ray": "a54134e98ad8e61c-NRT"
+          }
+        },
+        {
+          "status": "200",
+          "ip": "127.0.0.1",
+          "dns": "0.000332",
+          "connect": "0.000666",
+          "tls": "0.575763",
+          "ttfb": "1.459838",
+          "total": "1.460216",
+          "bytes": "97",
+          "ssl_verify": "0",
+          "round": 2,
+          "exit": 0,
+          "stderr": "",
+          "headers": {
+            "cache-control": "no-store",
+            "cf-cache-status": "DYNAMIC",
+            "content-encoding": "gzip",
+            "server": "cloudflare",
+            "cf-ray": "a54134f28eed77c9-NRT"
+          }
+        }
+      ]
+    }
+  ],
+  "sequential_connection_reuse": [
+    {
+      "status": "200",
+      "ip": "104.21.20.254",
+      "dns": "0.009218",
+      "connect": "0.229145",
+      "tls": "1.460244",
+      "ttfb": "2.636923",
+      "total": "2.637377",
+      "bytes": "1344",
+      "ssl_verify": "0"
+    },
+    {
+      "status": "200",
+      "ip": "104.21.20.254",
+      "dns": "0.000026",
+      "connect": "0.000000",
+      "tls": "0.000000",
+      "ttfb": "0.251718",
+      "total": "0.741840",
+      "bytes": "64158",
+      "ssl_verify": "0"
+    },
+    {
+      "status": "200",
+      "ip": "104.21.20.254",
+      "dns": "0.000022",
+      "connect": "0.000000",
+      "tls": "0.000000",
+      "ttfb": "0.567500",
+      "total": "0.567728",
+      "bytes": "96",
+      "ssl_verify": "0"
+    }
+  ],
+  "certificate_public_metadata": "subject=CN=foxhello.cn\nissuer=C=US, O=Google Trust Services, CN=WE1\nnotBefore=Oct  5 18:11:42 2026 GMT\nnotAfter=Jan  3 19:10:31 2027 GMT\nX509v3 Subject Alternative Name: \n    DNS:foxhello.cn, DNS:*.foxhello.cn\n",
+  "tunnel": {
+    "date": "2026-11-02",
+    "timezone": "Asia/Shanghai",
+    "sampleWindow": "last 4000 log lines; counts are partial, not full-day totals",
+    "registeredLocations": {
+      "lax13": 6,
+      "lax12": 2,
+      "lax01": 6,
+      "lax09": 3,
+      "lax05": 1,
+      "lax08": 1
+    },
+    "quicTimeoutLogLines": 42,
+    "recentReconnectLines": [
+      "2026-11-02T06:15:40Z WRN Serve tunnel error error=\"accept stream listener error: failed to accept QUIC stream: timeout: no recent network activity\" connIndex=2 event=0 ip=198.41.192.77",
+      "2026-11-02T06:15:41Z WRN Serve tunnel error error=\"datagram manager error: timeout: no recent network activity\" connIndex=3 event=0 ip=198.41.200.63",
+      "2026-11-02T06:15:42Z WRN Connection terminated error=\"datagram manager error: timeout: no recent network activity\" connIndex=3",
+      "2026-11-02T06:15:42Z WRN Connection terminated error=\"accept stream listener error: failed to accept QUIC stream: timeout: no recent network activity\" connIndex=2",
+      "2026-11-02T06:15:44Z WRN Serve tunnel error error=\"accept stream listener error: failed to accept QUIC stream: timeout: no recent network activity\" connIndex=1 event=0 ip=198.41.200.43",
+      "2026-11-02T06:15:44Z WRN Connection terminated error=\"accept stream listener error: failed to accept QUIC stream: timeout: no recent network activity\" connIndex=1",
+      "2026-11-02T06:15:47Z INF Registered tunnel connection connIndex=2 connection=[omitted] event=0 ip=198.41.192.47 location=lax08 protocol=quic",
+      "2026-11-02T06:15:47Z INF Registered tunnel connection connIndex=1 connection=[omitted] event=0 ip=198.41.200.53 location=lax13 protocol=quic",
+      "2026-11-02T06:15:51Z WRN Failed to dial a quic connection error=\"failed to dial to edge with quic: timeout: no recent network activity\" connIndex=3 event=0 ip=198.41.200.193",
+      "2026-11-02T06:15:54Z WRN Connection terminated error=\"failed to dial to edge with quic: timeout: no recent network activity\" connIndex=3",
+      "2026-11-02T06:16:24Z INF Registered tunnel connection connIndex=3 connection=[omitted] event=0 ip=198.41.200.63 location=lax13 protocol=quic"
+    ],
+    "workspaceIngress": "http://localhost:43110",
+    "note": "Canceled request at 2026-11-02T06:45:59Z is consistent with a client abort; it is not proof of an origin failure."
+  },
+  "origin_log_summary": {
+    "timezone": "Asia/Shanghai",
+    "date": "2026-11-02",
+    "routes": [
+      {
+        "route": "/robots.txt",
+        "count": 1,
+        "median_ms": 6.61,
+        "max_ms": 6.61,
+        "slowest": [
+          {
+            "time": "2026-11-02T05:51:41.741000+08:00",
+            "ms": 6.608853995800018,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "route": "/",
+        "count": 24,
+        "median_ms": 2.29,
+        "max_ms": 13.35,
+        "slowest": [
+          {
+            "time": "2026-11-02T14:49:52.862000+08:00",
+            "ms": 13.352728009223938,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T09:01:19.513000+08:00",
+            "ms": 6.125806987285614,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T14:48:45.605000+08:00",
+            "ms": 6.1167489886283875,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "route": "/assets/index-BuWlzUZ1.js",
+        "count": 5,
+        "median_ms": 7.93,
+        "max_ms": 34.63,
+        "slowest": [
+          {
+            "time": "2026-11-02T09:01:19.850000+08:00",
+            "ms": 34.62608802318573,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T14:42:50.947000+08:00",
+            "ms": 8.057233989238739,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T14:48:18.774000+08:00",
+            "ms": 7.9297720193862915,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "route": "/api/auth/status",
+        "count": 18,
+        "median_ms": 0.37,
+        "max_ms": 2.52,
+        "slowest": [
+          {
+            "time": "2026-11-02T09:01:20.355000+08:00",
+            "ms": 2.515919029712677,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T09:05:02.407000+08:00",
+            "ms": 0.7295399904251099,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T09:12:13.596000+08:00",
+            "ms": 0.6118490099906921,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "route": "/favicon.ico",
+        "count": 4,
+        "median_ms": 5.35,
+        "max_ms": 7.48,
+        "slowest": [
+          {
+            "time": "2026-11-02T09:01:20.562000+08:00",
+            "ms": 7.476221978664398,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T09:05:00.279000+08:00",
+            "ms": 6.206803023815155,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T14:48:21.124000+08:00",
+            "ms": 4.483878970146179,
+            "status": 304
+          }
+        ]
+      },
+      {
+        "route": "/api/workspace",
+        "count": 11,
+        "median_ms": 0.75,
+        "max_ms": 711.77,
+        "slowest": [
+          {
+            "time": "2026-11-02T14:46:22.314000+08:00",
+            "ms": 711.7666240334511,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T14:46:22.314000+08:00",
+            "ms": 707.0427170395851,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T09:05:03.433000+08:00",
+            "ms": 4.320039987564087,
+            "status": 404
+          }
+        ]
+      },
+      {
+        "route": "/api/workspaces/change-summary",
+        "count": 5,
+        "median_ms": 2268.95,
+        "max_ms": 5001.87,
+        "slowest": [
+          {
+            "time": "2026-11-02T09:07:14.678000+08:00",
+            "ms": 5001.871654987335,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T09:05:05.851000+08:00",
+            "ms": 2447.13804602623,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T09:12:18.864000+08:00",
+            "ms": 2268.954433977604,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "route": "/api/workspace/open",
+        "count": 3,
+        "median_ms": 9.51,
+        "max_ms": 1051.44,
+        "slowest": [
+          {
+            "time": "2026-11-02T09:05:29.415000+08:00",
+            "ms": 1051.4393979907036,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T14:45:49.550000+08:00",
+            "ms": 9.510547995567322,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T14:45:12.496000+08:00",
+            "ms": 0.6468020081520081,
+            "status": 404
+          }
+        ]
+      },
+      {
+        "route": "/api/files/tree",
+        "count": 7,
+        "median_ms": 314.32,
+        "max_ms": 745.51,
+        "slowest": [
+          {
+            "time": "2026-11-02T14:46:17.687000+08:00",
+            "ms": 745.5116260051727,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T14:45:52.405000+08:00",
+            "ms": 372.4116840362549,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T09:05:37.084000+08:00",
+            "ms": 321.82514399290085,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "route": "/api/git/editor-state",
+        "count": 188,
+        "median_ms": 0.98,
+        "max_ms": 5242.1,
+        "slowest": [
+          {
+            "time": "2026-11-02T09:21:27.624000+08:00",
+            "ms": 5242.098150968552,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T09:13:24.468000+08:00",
+            "ms": 1704.7664259672165,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T09:05:32.291000+08:00",
+            "ms": 1636.6328810453415,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "route": "/api/git/sync",
+        "count": 5,
+        "median_ms": 0.65,
+        "max_ms": 0.99,
+        "slowest": [
+          {
+            "time": "2026-11-02T09:05:36.764000+08:00",
+            "ms": 0.9892560243606567,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T11:56:59.121000+08:00",
+            "ms": 0.7877449989318848,
+            "status": 200
+          },
+          {
+            "time": "2026-11-02T11:58:11.295000+08:00",
+            "ms": 0.6474930047988892,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "route": "/api/auth/login",
+        "count": 1,
+        "median_ms": 0.67,
+        "max_ms": 0.67,
+        "slowest": [
+          {
+            "time": "2026-11-02T14:43:07.263000+08:00",
+            "ms": 0.6677440404891968,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "route": "/assets/WorkspaceRoot-DNFpTCgj.css",
+        "count": 1,
+        "median_ms": 2.04,
+        "max_ms": 2.04,
+        "slowest": [
+          {
+            "time": "2026-11-02T14:43:08.049000+08:00",
+            "ms": 2.041996955871582,
+            "status": 200
+          }
+        ]
+      },
+      {
+        "route": "/assets/WorkspaceRoot-4mVyV-hS.js",
+        "count": 1,
+        "median_ms": 2.87,
+        "max_ms": 2.87,
+        "slowest": [
+          {
+            "time": "2026-11-02T14:43:08.767000+08:00",
+            "ms": 2.8658169507980347,
+            "status": 200
+          }
+        ]
+      }
+    ],
+    "errors": []
+  },
+  "browser": {
+    "url": "https://workspace.foxhello.cn/",
+    "result": "Login form displayed",
+    "consoleErrorsAndWarnings": [],
+    "insecureSrcOrHrefElements": [],
+    "performanceTiming": "Not available through read-only browser surface; curl timings are not FCP."
+  },
+  "deployment": {
+    "html_sha256": "790e361014bdf5151021b8ef965f2298dd7c1d8d2149d4ef69831196cae020d0",
+    "equal_sources": [
+      "local source response",
+      "external HTTP response",
+      "external HTTPS response",
+      "dist/web/index.html"
+    ],
+    "entry_script": "/assets/index-BuWlzUZ1.js"
+  }
+}

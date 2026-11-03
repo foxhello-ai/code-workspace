@@ -121,6 +121,8 @@ Windows 配置使用 JSON：
 
 ## 发布维护者
 
+源码构建采用临时目录生成、资源校验、最后切换首页的发布方式，并保留三个构建的哈希资源。线上构建验证、安装升级兼容、静态回滚及 Cloudflare 缓存故障处理见[静态发布说明](static-deployment.md)。
+
 GitHub Actions 对 `main`、PR 和手动触发执行 Linux/macOS/Windows 三系统检查。推送与 `package.json` 版本完全一致的 tag 时，三个系统全部通过后才创建 Release。例如当前版本为 `1.2.0`：
 
 ```bash
